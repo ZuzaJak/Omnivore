@@ -1,18 +1,22 @@
 /* =========================================================
    Omnivore - Visual Styling & Primordial Abyss Theme
-   Toxic Neon Green biohazard aesthetics, glassmorphic HUD
+   Alien Purple & Toxic Green Contrast (Zerg / Xenomorph)
    ========================================================= */
 
 :root {
-  --bg-deep: #010803;
-  --bg-abyss: #031409;
+  --bg-deep: #06010a;
+  --bg-abyss: #0f0318;
+  --toxic-green: #39ff14;
+  --toxic-bright: #4ade80;
+  --alien-purple: #c084fc;
+  --alien-purple-glow: #a855f7;
   --cyan-glow: #39ff14;
   --cyan-bright: #4ade80;
-  --text-main: #f0fdf4;
-  --text-muted: #8ba895;
-  --glass-bg: rgba(3, 18, 8, 0.72);
-  --glass-border: rgba(57, 255, 20, 0.28);
-  --glass-glow: rgba(57, 255, 20, 0.18);
+  --text-main: #faf5ff;
+  --text-muted: #c4b5fd;
+  --glass-bg: rgba(18, 4, 30, 0.75);
+  --glass-border: rgba(168, 85, 247, 0.32);
+  --glass-glow: rgba(57, 255, 20, 0.15);
   --danger: #f43f5e;
 }
 
@@ -31,6 +35,7 @@ html, body {
   background-color: var(--bg-deep);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--text-main);
+  touch-action: none;
 }
 
 #game-container {
@@ -97,7 +102,7 @@ html, body {
   font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
   font-size: 19px;
   font-weight: 700;
-  color: var(--cyan-bright);
+  color: var(--toxic-bright);
   text-shadow: 0 0 12px rgba(57, 255, 20, 0.6);
 }
 
@@ -118,13 +123,13 @@ html, body {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #334155;
+  background: #475569;
   transition: all 0.2s ease;
 }
 
 .hud-dash.ready .dash-pill {
-  background: var(--cyan-glow);
-  box-shadow: 0 0 10px var(--cyan-glow);
+  background: var(--toxic-green);
+  box-shadow: 0 0 10px var(--toxic-green);
   transform: scale(1.15);
 }
 
@@ -133,7 +138,7 @@ html, body {
 }
 
 .hud-dash.recharging .dash-pill {
-  background: #1e293b;
+  background: #334155;
 }
 
 /* Top Right Audio Controls */
@@ -148,7 +153,7 @@ html, body {
   background: var(--glass-bg);
   backdrop-filter: blur(14px);
   border: 1px solid var(--glass-border);
-  color: var(--cyan-bright);
+  color: var(--toxic-bright);
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -161,15 +166,15 @@ html, body {
 }
 
 .icon-btn:hover {
-  background: rgba(10, 35, 18, 0.85);
-  border-color: var(--cyan-glow);
-  box-shadow: 0 0 16px var(--cyan-glow);
+  background: rgba(30, 8, 48, 0.85);
+  border-color: var(--toxic-green);
+  box-shadow: 0 0 16px var(--toxic-green);
   transform: translateY(-1px);
 }
 
 .icon-btn.muted {
-  color: #475569;
-  border-color: rgba(71, 85, 105, 0.3);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.3);
 }
 
 /* =========================================================
@@ -184,7 +189,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(1, 10, 4, 0.8);
+  background: rgba(6, 1, 12, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   z-index: 50;
@@ -192,9 +197,9 @@ html, body {
 }
 
 .screen-card {
-  background: rgba(3, 16, 8, 0.9);
-  border: 1px solid rgba(57, 255, 20, 0.35);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 40px rgba(57, 255, 20, 0.22);
+  background: rgba(15, 3, 25, 0.92);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 35px rgba(168, 85, 247, 0.25), 0 0 15px rgba(57, 255, 20, 0.15);
   border-radius: 20px;
   padding: 44px 52px;
   text-align: center;
@@ -225,7 +230,7 @@ html, body {
   letter-spacing: 6px;
   text-transform: uppercase;
   color: #ffffff;
-  text-shadow: 0 0 24px rgba(57, 255, 20, 0.85), 0 0 45px rgba(57, 255, 20, 0.45);
+  text-shadow: 0 0 20px rgba(57, 255, 20, 0.85), 0 0 45px rgba(168, 85, 247, 0.6);
   margin-bottom: 6px;
 }
 
@@ -233,8 +238,8 @@ html, body {
   font-size: 13px;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: var(--cyan-glow);
-  opacity: 0.9;
+  color: var(--toxic-green);
+  opacity: 0.95;
 }
 
 .game-tagline {
@@ -257,8 +262,8 @@ html, body {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: rgba(6, 25, 12, 0.65);
-  border: 1px solid rgba(57, 255, 20, 0.18);
+  background: rgba(24, 6, 38, 0.7);
+  border: 1px solid rgba(168, 85, 247, 0.22);
   border-radius: 12px;
   padding: 12px 14px;
 }
@@ -271,21 +276,21 @@ html, body {
 .inst-text {
   font-size: 12px;
   line-height: 1.4;
-  color: #dcfce7;
+  color: #f3e8ff;
 }
 
 .inst-text strong {
   display: block;
-  color: var(--cyan-bright);
+  color: var(--toxic-bright);
   font-size: 12px;
   margin-bottom: 2px;
 }
 
 /* Buttons */
 .primary-btn {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background: linear-gradient(135deg, #7e22ce 0%, #15803d 100%);
   color: #ffffff;
-  border: 1px solid rgba(74, 222, 128, 0.6);
+  border: 1px solid rgba(57, 255, 20, 0.65);
   padding: 16px 40px;
   font-size: 15px;
   font-weight: 700;
@@ -293,15 +298,15 @@ html, body {
   text-transform: uppercase;
   border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 24px rgba(34, 197, 94, 0.4);
+  box-shadow: 0 4px 24px rgba(126, 34, 206, 0.45), 0 0 16px rgba(57, 255, 20, 0.3);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   display: inline-block;
   width: 100%;
 }
 
 .primary-btn:hover {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  box-shadow: 0 6px 32px rgba(57, 255, 20, 0.65);
+  background: linear-gradient(135deg, #9333ea 0%, #16a34a 100%);
+  box-shadow: 0 6px 32px rgba(168, 85, 247, 0.6), 0 0 24px rgba(57, 255, 20, 0.5);
   transform: translateY(-2px);
 }
 
@@ -318,8 +323,8 @@ html, body {
 }
 
 .stat-box {
-  background: rgba(6, 25, 12, 0.75);
-  border: 1px solid rgba(57, 255, 20, 0.22);
+  background: rgba(24, 6, 38, 0.75);
+  border: 1px solid rgba(168, 85, 247, 0.25);
   border-radius: 12px;
   padding: 14px;
   display: flex;
@@ -338,7 +343,7 @@ html, body {
   font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
   font-size: 24px;
   font-weight: 700;
-  color: var(--cyan-bright);
+  color: var(--toxic-bright);
 }
 
 .stat-val.highlight {

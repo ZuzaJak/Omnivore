@@ -10,7 +10,8 @@ import { Vector2D, clamp, randomRange, randomChoice, hsla } from "./math.js";
 export const CELL_TYPES = {
   PLANKTON: "plankton",
   PREY: "prey",
-  PREDATOR: "predator"
+  PREDATOR: "predator",
+  PARASITE: "parasite"
 };
 
 export class AICell extends Cell {
@@ -19,20 +20,27 @@ export class AICell extends Cell {
     let hue, saturation, lightness, baseMaxSpeed;
 
     if (type === CELL_TYPES.PLANKTON) {
-      hue = randomChoice([90, 105, 120, 135]); // Electric chartreuse, toxic lime, neon green, vibrant emerald
+      hue = randomChoice([95, 110, 120, 135]); // Toxic neon green, chartreuse, lime
       saturation = 100;
       lightness = 60;
       baseMaxSpeed = 2.4;
     } else if (type === CELL_TYPES.PREY) {
-      hue = randomChoice([95, 115, 128, 142]); // Radioactive lime, bright green, toxic mint, emerald
+      // Dynamic mix of toxic neon green and bioluminescent alien violet
+      hue = randomChoice([115, 130, 265, 285]); 
       saturation = 95;
-      lightness = 54;
+      lightness = 55;
       baseMaxSpeed = 4.8;
-    } else {
-      // PREDATOR
-      hue = randomChoice([80, 92, 108, 145]); // Acidic yellow-green, virulent toxic green, venomous dark emerald
+    } else if (type === CELL_TYPES.PARASITE) {
+      // Crimson / Blood Red swarm parasite (Hue ~350-10)
+      hue = randomChoice([345, 355, 2, 12]);
       saturation = 100;
-      lightness = 48;
+      lightness = 52;
+      baseMaxSpeed = 5.8;
+    } else {
+      // PREDATOR: Deep glowing alien purple / violet (~280)
+      hue = randomChoice([275, 280, 288, 295]); 
+      saturation = 100;
+      lightness = 50;
       baseMaxSpeed = 4.2;
     }
 
@@ -45,7 +53,7 @@ export class AICell extends Cell {
     });
 
     this.type = type;
-    this.sensorRadius = Math.max(160, radius * 4.2);
+    this.sensorRadius = type === CELL_TYPES.PARASITE ? 850 : Math.max(160, radius * 4.2);
 
     // Wandering wander-angle for organic fluid drifting
     this.wanderAngle = Math.random() * Math.PI * 2;
@@ -79,7 +87,29 @@ export class AICell extends Cell {
       return;
     }
 
-    // 3. Scan for threats & food
+    // 3. Parasite: Fast, aggressive swarm tracking the player
+    if (this.type === CELL_TYPES.PARASITE) {
+      if (player && !player.isDead) {
+        const toPlayer = Vector2D.sub(player.pos, this.pos);
+        const distToPlayer = toPlayer.mag();
+
+        if (distToPlayer < this.sensorRadius) {
+          toPlayer.normalize();
+          // Add organic twitchy swarm jitter
+          const jitter = Vector2D.fromAngle(Math.random() * Math.PI * 2, 0.35);
+          toPlayer.add(jitter).normalize();
+          this.applyForce(toPlayer.mult(0.68));
+          return;
+        }
+      }
+      // Out of range: Rapid search wander
+      this.wanderAngle += (Math.random() - 0.5) * 0.45;
+      const wander = Vector2D.fromAngle(this.wanderAngle, 0.35);
+      this.applyForce(wander);
+      return;
+    }
+
+    // 4. Scan for threats & food
     let closestThreat = null;
     let closestThreatDist = Infinity;
     let closestFood = null;

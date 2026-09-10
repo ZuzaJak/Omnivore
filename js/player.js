@@ -97,6 +97,23 @@ export class Player extends Cell {
 
     // 4. Update parent Cell physics
     super.update(dt);
+
+    // 5. Hard World Boundary Clamping & Elastic Bounce
+    if (worldRadius) {
+      const dist = this.pos.mag();
+      const maxDist = Math.max(10, worldRadius - this.radius);
+      if (dist > maxDist) {
+        const norm = this.pos.clone().normalize();
+        this.pos.set(norm.x * maxDist, norm.y * maxDist);
+        const outward = this.vel.x * norm.x + this.vel.y * norm.y;
+        if (outward > 0) {
+          // Reflect velocity inward with elastic bounce
+          this.vel.sub(norm.mult(outward * 1.5));
+          return true; // Boundary hit!
+        }
+      }
+    }
+    return false;
   }
 
   render(ctx) {

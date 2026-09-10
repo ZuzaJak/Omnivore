@@ -332,6 +332,34 @@ class SoundSystem {
       osc.stop(t + 1.9);
     });
   }
+
+  playLeech() {
+    if (!this.ctx || this.isMuted) return;
+    this.resume();
+
+    const t = this.ctx.currentTime;
+    // Rapid harsh sting / biting sound
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(450, t);
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(650, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.16);
+
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(t);
+    osc.stop(t + 0.17);
+  }
 }
 
 
@@ -554,8 +582,10 @@ class Cell {
     this.targetRadius = radius;
     this.minRadius = 10;
 
-    // Biological colors & glow
-    this.hue = options.hue !== undefined ? options.hue : randomRange(90, 145);
+    // Biological colors & glow: Alien Toxic Green & Deep Purple
+    this.hue = options.hue !== undefined
+      ? options.hue
+      : (Math.random() > 0.35 ? randomRange(95, 135) : randomRange(270, 295));
     this.saturation = options.saturation || 95;
     this.lightness = options.lightness || 54;
     this.baseColor = hsla(this.hue, this.saturation, this.lightness, 0.85);
@@ -577,6 +607,7 @@ class Cell {
 
     // Impact / Juicing feedback
     this.flashTimer = 0;
+    this.flashColor = null;
     this.squishFactor = 1.0;
     this.stretchFactor = 1.0;
     this.elasticBounce = 0;
@@ -598,11 +629,10 @@ class Cell {
   }
 
   get maxSpeed() {
-    // Mass-speed tradeoff: larger cells move slower
-    // Speed scales inversely with radius: v_max = base * (r_ref / r)^0.45
-    const refRadius = 24;
-    const ratio = refRadius / Math.max(12, this.radius);
-    return Math.max(1.1, this.baseMaxSpeed * Math.pow(ratio, 0.44));
+    // Rebalanced mass-speed tradeoff: gentle scaling keeps massive cells agile and fun
+    const refRadius = 26;
+    const ratio = refRadius / Math.max(16, this.radius);
+    return Math.max(2.6, this.baseMaxSpeed * Math.pow(ratio, 0.16));
   }
 
   generateOrganelles() {
@@ -681,6 +711,9 @@ class Cell {
     // 3. Flash decay
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
+      if (this.flashTimer <= 0) {
+        this.flashColor = null;
+      }
     }
 
     // 4. Undulation phase advancement
@@ -739,7 +772,7 @@ class Cell {
     const isFlashing = this.flashTimer > 0;
     const glowBlur = isFlashing ? 32 : Math.min(26, Math.max(12, this.radius * 0.45));
     ctx.shadowBlur = glowBlur;
-    ctx.shadowColor = isFlashing ? "#ffffff" : this.glowColor;
+    ctx.shadowColor = isFlashing ? (this.flashColor || "#ffffff") : this.glowColor;
 
     // 2. Build Organic Spline Membrane Path
     ctx.beginPath();
@@ -764,9 +797,15 @@ class Cell {
     // 3. Translucent Cytoplasm Shading with Multi-Stop Radial Gradient
     const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 1.1);
     if (isFlashing) {
-      grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-      grad.addColorStop(0.5, hsla(this.hue, 100, 85, 0.8));
-      grad.addColorStop(1, hsla(this.hue, 100, 70, 0.9));
+      if (this.flashColor) {
+        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        grad.addColorStop(0.5, this.flashColor);
+        grad.addColorStop(1, this.flashColor);
+      } else {
+        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        grad.addColorStop(0.5, hsla(this.hue, 100, 85, 0.8));
+        grad.addColorStop(1, hsla(this.hue, 100, 70, 0.9));
+      }
     } else {
       grad.addColorStop(0, hsla(this.hue, this.saturation, 70, 0.45));
       grad.addColorStop(0.4, hsla(this.hue, this.saturation, 55, 0.35));
@@ -779,7 +818,7 @@ class Cell {
 
     // 4. Outer Membrane Wall Stroke
     ctx.lineWidth = Math.max(1.8, Math.min(4.5, this.radius * 0.08));
-    ctx.strokeStyle = isFlashing ? "#ffffff" : hsla(this.hue, 100, 75, 0.9);
+    ctx.strokeStyle = isFlashing ? (this.flashColor || "#ffffff") : hsla(this.hue, 100, 75, 0.9);
     ctx.stroke();
 
     // 5. Internal Organelles (Nucleus & floating structures)
@@ -958,6 +997,23 @@ class Player extends Cell {
 
     // 4. Update parent Cell physics
     super.update(dt);
+
+    // 5. Hard World Boundary Clamping & Elastic Bounce
+    if (worldRadius) {
+      const dist = this.pos.mag();
+      const maxDist = Math.max(10, worldRadius - this.radius);
+      if (dist > maxDist) {
+        const norm = this.pos.clone().normalize();
+        this.pos.set(norm.x * maxDist, norm.y * maxDist);
+        const outward = this.vel.x * norm.x + this.vel.y * norm.y;
+        if (outward > 0) {
+          // Reflect velocity inward with elastic bounce
+          this.vel.sub(norm.mult(outward * 1.5));
+          return true; // Boundary hit!
+        }
+      }
+    }
+    return false;
   }
 
   render(ctx) {
@@ -1043,7 +1099,8 @@ class Player extends Cell {
 const CELL_TYPES = {
   PLANKTON: "plankton",
   PREY: "prey",
-  PREDATOR: "predator"
+  PREDATOR: "predator",
+  PARASITE: "parasite"
 };
 class AICell extends Cell {
   constructor(x, y, radius, type = CELL_TYPES.PREY) {
@@ -1051,20 +1108,27 @@ class AICell extends Cell {
     let hue, saturation, lightness, baseMaxSpeed;
 
     if (type === CELL_TYPES.PLANKTON) {
-      hue = randomChoice([90, 105, 120, 135]); // Electric chartreuse, toxic lime, neon green, vibrant emerald
+      hue = randomChoice([95, 110, 120, 135]); // Toxic neon green, chartreuse, lime
       saturation = 100;
       lightness = 60;
       baseMaxSpeed = 2.4;
     } else if (type === CELL_TYPES.PREY) {
-      hue = randomChoice([95, 115, 128, 142]); // Radioactive lime, bright green, toxic mint, emerald
+      // Dynamic mix of toxic neon green and bioluminescent alien violet
+      hue = randomChoice([115, 130, 265, 285]); 
       saturation = 95;
-      lightness = 54;
+      lightness = 55;
       baseMaxSpeed = 4.8;
-    } else {
-      // PREDATOR
-      hue = randomChoice([80, 92, 108, 145]); // Acidic yellow-green, virulent toxic green, venomous dark emerald
+    } else if (type === CELL_TYPES.PARASITE) {
+      // Crimson / Blood Red swarm parasite (Hue ~350-10)
+      hue = randomChoice([345, 355, 2, 12]);
       saturation = 100;
-      lightness = 48;
+      lightness = 52;
+      baseMaxSpeed = 5.8;
+    } else {
+      // PREDATOR: Deep glowing alien purple / violet (~280)
+      hue = randomChoice([275, 280, 288, 295]); 
+      saturation = 100;
+      lightness = 50;
       baseMaxSpeed = 4.2;
     }
 
@@ -1077,7 +1141,7 @@ class AICell extends Cell {
     });
 
     this.type = type;
-    this.sensorRadius = Math.max(160, radius * 4.2);
+    this.sensorRadius = type === CELL_TYPES.PARASITE ? 850 : Math.max(160, radius * 4.2);
 
     // Wandering wander-angle for organic fluid drifting
     this.wanderAngle = Math.random() * Math.PI * 2;
@@ -1111,7 +1175,29 @@ class AICell extends Cell {
       return;
     }
 
-    // 3. Scan for threats & food
+    // 3. Parasite: Fast, aggressive swarm tracking the player
+    if (this.type === CELL_TYPES.PARASITE) {
+      if (player && !player.isDead) {
+        const toPlayer = Vector2D.sub(player.pos, this.pos);
+        const distToPlayer = toPlayer.mag();
+
+        if (distToPlayer < this.sensorRadius) {
+          toPlayer.normalize();
+          // Add organic twitchy swarm jitter
+          const jitter = Vector2D.fromAngle(Math.random() * Math.PI * 2, 0.35);
+          toPlayer.add(jitter).normalize();
+          this.applyForce(toPlayer.mult(0.68));
+          return;
+        }
+      }
+      // Out of range: Rapid search wander
+      this.wanderAngle += (Math.random() - 0.5) * 0.45;
+      const wander = Vector2D.fromAngle(this.wanderAngle, 0.35);
+      this.applyForce(wander);
+      return;
+    }
+
+    // 4. Scan for threats & food
     let closestThreat = null;
     let closestThreatDist = Infinity;
     let closestFood = null;
@@ -1182,18 +1268,21 @@ class AICell extends Cell {
 /* === js/background.js === */
 /**
  * Omnivore - Atmospheric Parallax Background System
- * Renders multi-layered out-of-focus bokeh orbs, drifting marine snow,
- * and an organic fluid coordinate grid with deep underwater vignette.
+ * Renders 3 parallax layers (far nebula orbs, mid spores, near marine snow)
+ * and an undulating, liquid-refracted fluid grid with deep alien violet vignette.
  */
 class BackgroundSystem {
   constructor(worldRadius = 3500) {
     this.worldRadius = worldRadius;
 
-    // Layer 1: Far, massive out-of-focus bokeh orbs (speed factor ~0.15)
-    this.farBokeh = this.createBokehOrbs(45, 45, 110, 0.08, 0.18);
+    // Layer 1: Far, massive out-of-focus nebula orbs (speed factor ~0.12)
+    this.farBokeh = this.createBokehOrbs(50, 50, 130, 0.08, 0.22);
 
-    // Layer 2: Mid-depth marine snow & bioluminescent dust (speed factor ~0.42)
-    this.midSnow = this.createMarineSnow(160, 2, 5.5, 0.25, 0.45);
+    // Layer 2: Mid-depth drifting alien spores & vacuoles (speed factor ~0.35)
+    this.midSpores = this.createMidSpores(90, 10, 28, 0.15, 0.35);
+
+    // Layer 3: Near-depth marine snow & bioluminescent plankton motes (speed factor ~0.60)
+    this.nearSnow = this.createMarineSnow(180, 2, 5.5, 0.25, 0.6);
 
     // Subtle fluid grid spacing
     this.gridSpacing = 160;
@@ -1202,12 +1291,14 @@ class BackgroundSystem {
   createBokehOrbs(count, minR, maxR, minAlpha, maxAlpha) {
     const list = [];
     for (let i = 0; i < count; i++) {
+      // Alien contrast: mix of deep violet/purple (270-300) and toxic neon green (105-135)
+      const hue = Math.random() > 0.4 ? randomRange(270, 305) : randomRange(105, 135);
       list.push({
         x: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
         y: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
         radius: randomRange(minR, maxR),
         alpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(95, 145), // Toxic neon green, biohazard lime, emerald spores
+        hue,
         driftAngle: Math.random() * Math.PI * 2,
         driftSpeed: randomRange(0.08, 0.22),
         pulseSpeed: randomRange(0.008, 0.02),
@@ -1217,34 +1308,61 @@ class BackgroundSystem {
     return list;
   }
 
+  createMidSpores(count, minR, maxR, minAlpha, maxAlpha) {
+    const list = [];
+    for (let i = 0; i < count; i++) {
+      const hue = Math.random() > 0.5 ? randomRange(110, 135) : randomRange(265, 295);
+      list.push({
+        x: randomRange(-this.worldRadius, this.worldRadius),
+        y: randomRange(-this.worldRadius, this.worldRadius),
+        radius: randomRange(minR, maxR),
+        alpha: randomRange(minAlpha, maxAlpha),
+        hue,
+        vx: randomRange(-0.25, 0.25),
+        vy: randomRange(-0.25, 0.25),
+        pulsePhase: Math.random() * Math.PI * 2,
+        pulseSpeed: randomRange(0.015, 0.035)
+      });
+    }
+    return list;
+  }
+
   createMarineSnow(count, minR, maxR, minAlpha, maxAlpha) {
     const list = [];
     for (let i = 0; i < count; i++) {
+      const hue = Math.random() > 0.35 ? randomRange(100, 135) : randomRange(270, 295);
       list.push({
         x: randomRange(-this.worldRadius, this.worldRadius),
         y: randomRange(-this.worldRadius, this.worldRadius),
         radius: randomRange(minR, maxR),
         baseAlpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(90, 140),
-        vx: randomRange(-0.15, 0.15),
-        vy: randomRange(-0.15, 0.15),
+        hue,
+        vx: randomRange(-0.2, 0.2),
+        vy: randomRange(-0.2, 0.2),
         flickerPhase: Math.random() * Math.PI * 2,
-        flickerSpeed: randomRange(0.02, 0.05)
+        flickerSpeed: randomRange(0.025, 0.06)
       });
     }
     return list;
   }
 
   update(dt = 1) {
-    // Animate bokeh orbs gently
+    // 1. Animate far nebula bokeh
     for (const b of this.farBokeh) {
       b.x += Math.cos(b.driftAngle) * b.driftSpeed * dt;
       b.y += Math.sin(b.driftAngle) * b.driftSpeed * dt;
       b.pulsePhase += b.pulseSpeed * dt;
     }
 
-    // Animate marine snow
-    for (const s of this.midSnow) {
+    // 2. Animate mid-depth spores
+    for (const s of this.midSpores) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.pulsePhase += s.pulseSpeed * dt;
+    }
+
+    // 3. Animate near marine snow
+    for (const s of this.nearSnow) {
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.flickerPhase += s.flickerSpeed * dt;
@@ -1252,34 +1370,34 @@ class BackgroundSystem {
   }
 
   render(ctx, camera, viewWidth, viewHeight) {
-    // 1. Deep abyss vignette background fill
+    // 1. Deep abyss vignette: Alien dark murky purple / void violet
     ctx.save();
     const bgGrad = ctx.createRadialGradient(
-      viewWidth / 2, viewHeight / 2, 80,
-      viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.75
+      viewWidth / 2, viewHeight / 2, 70,
+      viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
     );
-    bgGrad.addColorStop(0, "#041c0e"); // Deep murky toxic green core
-    bgGrad.addColorStop(0.55, "#020f06"); // Dark abyss swamp green
-    bgGrad.addColorStop(1, "#010602"); // Void bio-black edge
+    bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
+    bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
+    bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
 
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
     ctx.restore();
 
-    // 2. Render Far Bokeh Orbs (Parallax factor ~0.15)
+    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12)
     ctx.save();
-    const farParallax = 0.15;
+    const farParallax = 0.12;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * farParallax, -camera.pos.y * farParallax);
 
     for (const b of this.farBokeh) {
-      const pulse = 1 + Math.sin(b.pulsePhase) * 0.12;
+      const pulse = 1 + Math.sin(b.pulsePhase) * 0.14;
       const r = b.radius * pulse;
 
       const bokehGrad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
-      bokehGrad.addColorStop(0, hsla(b.hue, 85, 65, b.alpha * 1.5));
-      bokehGrad.addColorStop(0.6, hsla(b.hue, 80, 45, b.alpha * 0.6));
+      bokehGrad.addColorStop(0, hsla(b.hue, 90, 65, b.alpha * 1.5));
+      bokehGrad.addColorStop(0.55, hsla(b.hue, 85, 45, b.alpha * 0.65));
       bokehGrad.addColorStop(1, hsla(b.hue, 80, 30, 0));
 
       ctx.fillStyle = bokehGrad;
@@ -1289,16 +1407,39 @@ class BackgroundSystem {
     }
     ctx.restore();
 
-    // 3. Render Mid-depth Marine Snow & Spores (Parallax factor ~0.45)
+    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35)
     ctx.save();
-    const midParallax = 0.45;
+    const midParallax = 0.35;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * midParallax, -camera.pos.y * midParallax);
 
-    for (const s of this.midSnow) {
-      const alpha = s.baseAlpha * (0.8 + Math.sin(s.flickerPhase) * 0.2);
-      ctx.fillStyle = hsla(s.hue, 90, 75, alpha);
+    for (const s of this.midSpores) {
+      const pulse = 1 + Math.sin(s.pulsePhase) * 0.2;
+      const r = s.radius * pulse;
+
+      const sporeGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+      sporeGrad.addColorStop(0, hsla(s.hue, 95, 70, s.alpha * 1.3));
+      sporeGrad.addColorStop(0.65, hsla(s.hue, 90, 50, s.alpha * 0.5));
+      sporeGrad.addColorStop(1, hsla(s.hue, 85, 30, 0));
+
+      ctx.fillStyle = sporeGrad;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 4. Layer 3: Near-Depth Marine Snow & Plankton Dust (Parallax factor ~0.60)
+    ctx.save();
+    const nearParallax = 0.60;
+    ctx.translate(viewWidth / 2, viewHeight / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.pos.x * nearParallax, -camera.pos.y * nearParallax);
+
+    for (const s of this.nearSnow) {
+      const alpha = s.baseAlpha * (0.8 + Math.sin(s.flickerPhase) * 0.25);
+      ctx.fillStyle = hsla(s.hue, 95, 75, alpha);
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
       ctx.fill();
@@ -1307,7 +1448,6 @@ class BackgroundSystem {
   }
 
   renderWorldGrid(ctx, camera, viewWidth, viewHeight) {
-    // Rendered in camera world space: subtle fluid grid coordinates
     ctx.save();
 
     // Calculate visible bounds in world coordinates
@@ -1323,45 +1463,76 @@ class BackgroundSystem {
     const startY = Math.floor(top / this.gridSpacing) * this.gridSpacing;
     const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
 
-    // Subtle fluid coordinate grid points & faint lines
-    ctx.strokeStyle = "rgba(34, 197, 94, 0.08)";
-    ctx.lineWidth = 1;
+    // Time-based liquid membrane undulation (sine waves simulate underwater optical refraction)
+    const time = performance.now() * 0.0012;
+    const step = 32; // Segment density for smooth liquid curves
 
-    ctx.beginPath();
+    ctx.strokeStyle = "rgba(168, 85, 247, 0.12)"; // Ethereal alien violet grid
+    ctx.lineWidth = 1.2;
+
+    // Vertical liquid undulating grid lines
     for (let x = startX; x <= endX; x += this.gridSpacing) {
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, bottom);
+      ctx.beginPath();
+      for (let y = top - step; y <= bottom + step; y += step) {
+        const waveX = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
+                        + Math.cos(y * 0.016 - time * 0.8) * 3;
+        if (y <= top - step) {
+          ctx.moveTo(waveX, y);
+        } else {
+          ctx.lineTo(waveX, y);
+        }
+      }
+      ctx.stroke();
     }
-    for (let y = startY; y <= endY; y += this.gridSpacing) {
-      ctx.moveTo(left, y);
-      ctx.lineTo(right, y);
-    }
-    ctx.stroke();
 
-    // Fine glowing coordinate nodes
-    ctx.fillStyle = "rgba(57, 255, 20, 0.25)";
+    // Horizontal liquid undulating grid lines
+    for (let y = startY; y <= endY; y += this.gridSpacing) {
+      ctx.beginPath();
+      for (let x = left - step; x <= right + step; x += step) {
+        const waveY = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
+                        + Math.cos(x * 0.016 - time * 0.8) * 3;
+        if (x <= left - step) {
+          ctx.moveTo(x, waveY);
+        } else {
+          ctx.lineTo(x, waveY);
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Fine glowing coordinate nodes sitting on wave intersections
+    ctx.fillStyle = "rgba(57, 255, 20, 0.35)"; // Toxic green nodes
     for (let x = startX; x <= endX; x += this.gridSpacing) {
       for (let y = startY; y <= endY; y += this.gridSpacing) {
+        const nx = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
+                     + Math.cos(y * 0.016 - time * 0.8) * 3;
+        const ny = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
+                     + Math.cos(x * 0.016 - time * 0.8) * 3;
         ctx.beginPath();
-        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+        ctx.arc(nx, ny, 1.8, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    // World Boundary Membrane (Primordial bio-barrier ring)
+    // World Boundary Membrane (Pulsing dual violet-green bio-barrier)
+    const barrierPulse = Math.sin(time * 2) * 3;
+
+    // Inner glowing toxic green ring
     ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
-    ctx.lineWidth = 6;
-    ctx.shadowBlur = 28;
-    ctx.shadowColor = "#22c55e";
+    ctx.lineWidth = 5;
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = "#39ff14";
     ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius, 0, Math.PI * 2);
+    ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Outermost warning ring
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.35)";
+    // Outer glowing alien purple ring
+    ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
     ctx.lineWidth = 3;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "#a855f7";
     ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius + 20, 0, Math.PI * 2);
+    ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.restore();
@@ -1511,9 +1682,11 @@ class Game {
     this.startTime = 0;
     this.timeSurvived = 0;
 
-    // Input Tracking
+    // Input Tracking & Mobile Gestures
     this.mouseScreen = new Vector2D(canvas.width / 2, canvas.height / 2);
     this.isMouseDown = false;
+    this.lastTapTime = 0;
+    this.lastTapPos = new Vector2D(0, 0);
 
     // Loop Timing
     this.lastTimestamp = 0;
@@ -1551,30 +1724,78 @@ class Game {
       }
     });
 
-    // Touch Support for mobile / touchpads
-    window.addEventListener("touchmove", (e) => {
-      if (e.touches.length > 0) {
-        const rect = this.canvas.getBoundingClientRect();
-        this.mouseScreen.set(
-          e.touches[0].clientX - rect.left,
-          e.touches[0].clientY - rect.top
-        );
-      }
-    }, { passive: true });
+    // Mobile Touch Steering & Double-Tap Dash System
+    window.addEventListener(
+      "touchstart",
+      (e) => {
+        // Do not block interaction with UI buttons and modals
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
 
-    window.addEventListener("touchstart", (e) => {
-      this.sound.init();
-      if (e.touches.length > 0) {
-        const rect = this.canvas.getBoundingClientRect();
-        this.mouseScreen.set(
-          e.touches[0].clientX - rect.left,
-          e.touches[0].clientY - rect.top
-        );
-      }
-      if (this.state === GAME_STATES.PLAYING) {
-        this.triggerPlayerDash();
-      }
-    }, { passive: true });
+        // Prevent mobile browser zooming and pull-down reload
+        e.preventDefault();
+        this.sound.init();
+
+        if (e.touches.length > 0) {
+          const rect = this.canvas.getBoundingClientRect();
+          const touchX = e.touches[0].clientX - rect.left;
+          const touchY = e.touches[0].clientY - rect.top;
+
+          // Touch and drag ONLY steers the cell
+          this.mouseScreen.set(touchX, touchY);
+
+          // Double-tap detection for Dash
+          const now = performance.now();
+          const timeDiff = now - this.lastTapTime;
+          const distDiff = Math.hypot(touchX - this.lastTapPos.x, touchY - this.lastTapPos.y);
+
+          if (timeDiff < 300 && distDiff < 50) {
+            // Double-tap confirmed: execute dash!
+            if (this.state === GAME_STATES.PLAYING) {
+              this.triggerPlayerDash();
+            }
+            this.lastTapTime = 0;
+          } else {
+            this.lastTapTime = now;
+            this.lastTapPos.set(touchX, touchY);
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    window.addEventListener(
+      "touchmove",
+      (e) => {
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
+
+        // Prevent default mobile gesture scrolling
+        e.preventDefault();
+
+        if (e.touches.length > 0) {
+          const rect = this.canvas.getBoundingClientRect();
+          this.mouseScreen.set(
+            e.touches[0].clientX - rect.left,
+            e.touches[0].clientY - rect.top
+          );
+        }
+      },
+      { passive: false }
+    );
+
+    window.addEventListener(
+      "touchend",
+      (e) => {
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
+        e.preventDefault();
+      },
+      { passive: false }
+    );
 
     // UI Buttons
     if (this.ui.startBtn) {
@@ -1674,16 +1895,19 @@ class Game {
       pos = new Vector2D(randomRange(-2000, 2000), randomRange(-2000, 2000));
     }
 
-    // Role Distribution: 62% Plankton, 26% Prey, 12% Predator
+    // Role Distribution: 50% Plankton, 24% Prey, 12% Parasite, 14% Predator
     const roll = Math.random();
     let type, radius;
 
-    if (roll < 0.62) {
+    if (roll < 0.50) {
       type = CELL_TYPES.PLANKTON;
       radius = randomRange(8, 14);
-    } else if (roll < 0.88) {
+    } else if (roll < 0.74) {
       type = CELL_TYPES.PREY;
       radius = randomRange(16, 36);
+    } else if (roll < 0.86) {
+      type = CELL_TYPES.PARASITE;
+      radius = randomRange(13, 20);
     } else {
       type = CELL_TYPES.PREDATOR;
       // Apex predators can be significantly larger than starting player
@@ -1737,8 +1961,24 @@ class Game {
     const worldMouse = this.camera.screenToWorld(this.mouseScreen.x, this.mouseScreen.y);
     this.player.setTarget(worldMouse.x, worldMouse.y);
 
-    // 2. Update Player
-    this.player.update(dt);
+    // 2. Dynamic Arena Growth: As player grows, smoothly expand world pool
+    const baseWorldRadius = 3500;
+    const targetWorldRadius = baseWorldRadius + Math.max(0, (this.player.targetRadius - 26) * 45);
+    this.worldRadius = lerp(this.worldRadius, targetWorldRadius, 0.03);
+    this.background.worldRadius = this.worldRadius;
+
+    // 3. Update Player & Enforce Hard Boundary Clamping
+    const hitBoundary = this.player.update(dt, this.worldRadius);
+    if (hitBoundary) {
+      this.camera.addShake(4);
+      this.particles.createDashTrail(
+        this.player.pos.x,
+        this.player.pos.y,
+        this.player.pos.heading() + Math.PI,
+        "#39ff14",
+        this.player.radius * 0.7
+      );
+    }
 
     // 4. Update Camera tracking centered on player
     this.camera.update(this.player, dt);
@@ -1787,6 +2027,46 @@ class Game {
       const eatDistance = (pR + cell.radius) * 0.88;
 
       if (dist < eatDistance) {
+        // Special Case: RED PARASITE leech attack!
+        if (cell.type === CELL_TYPES.PARASITE) {
+          // Drain 8% of player's mass (does NOT trigger Game Over)
+          this.player.loseMassPercent(0.08);
+
+          // Flash player in toxic blood red
+          this.player.flashTimer = 18;
+          this.player.flashColor = "#f43f5e";
+
+          // Sound, Screen Shake
+          this.sound.playLeech();
+          this.camera.addShake(7);
+
+          // Forcefully bounce parasite away to prevent continuous frame leeching
+          const knockDir = Vector2D.sub(cell.pos, pPos);
+          if (knockDir.magSq() < 0.1) knockDir.set(Math.random() - 0.5, Math.random() - 0.5);
+          knockDir.normalize();
+
+          cell.vel.set(knockDir.x * 16, knockDir.y * 16);
+          cell.pos.set(
+            pPos.x + knockDir.x * (pR + cell.radius + 32),
+            pPos.y + knockDir.y * (pR + cell.radius + 32)
+          );
+
+          // Blood red juice particles at contact point
+          const midX = (pPos.x + cell.pos.x) / 2;
+          const midY = (pPos.y + cell.pos.y) / 2;
+          this.particles.createEatBurst(midX, midY, "#f43f5e", 22, 14);
+
+          // Floating indicator text
+          this.particles.addFloatingText(
+            pPos.x,
+            pPos.y - pR - 16,
+            "-8% Leech!",
+            "#f43f5e",
+            15
+          );
+          continue;
+        }
+
         // Player is larger: EAT!
         if (pR > cell.radius * 1.05) {
           const eatenMass = Math.round(cell.mass);

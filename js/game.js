@@ -47,9 +47,11 @@ export class Game {
     this.startTime = 0;
     this.timeSurvived = 0;
 
-    // Input Tracking
+    // Input Tracking & Mobile Gestures
     this.mouseScreen = new Vector2D(canvas.width / 2, canvas.height / 2);
     this.isMouseDown = false;
+    this.lastTapTime = 0;
+    this.lastTapPos = new Vector2D(0, 0);
 
     // Loop Timing
     this.lastTimestamp = 0;
@@ -87,30 +89,78 @@ export class Game {
       }
     });
 
-    // Touch Support for mobile / touchpads
-    window.addEventListener("touchmove", (e) => {
-      if (e.touches.length > 0) {
-        const rect = this.canvas.getBoundingClientRect();
-        this.mouseScreen.set(
-          e.touches[0].clientX - rect.left,
-          e.touches[0].clientY - rect.top
-        );
-      }
-    }, { passive: true });
+    // Mobile Touch Steering & Double-Tap Dash System
+    window.addEventListener(
+      "touchstart",
+      (e) => {
+        // Do not block interaction with UI buttons and modals
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
 
-    window.addEventListener("touchstart", (e) => {
-      this.sound.init();
-      if (e.touches.length > 0) {
-        const rect = this.canvas.getBoundingClientRect();
-        this.mouseScreen.set(
-          e.touches[0].clientX - rect.left,
-          e.touches[0].clientY - rect.top
-        );
-      }
-      if (this.state === GAME_STATES.PLAYING) {
-        this.triggerPlayerDash();
-      }
-    }, { passive: true });
+        // Prevent mobile browser zooming and pull-down reload
+        e.preventDefault();
+        this.sound.init();
+
+        if (e.touches.length > 0) {
+          const rect = this.canvas.getBoundingClientRect();
+          const touchX = e.touches[0].clientX - rect.left;
+          const touchY = e.touches[0].clientY - rect.top;
+
+          // Touch and drag ONLY steers the cell
+          this.mouseScreen.set(touchX, touchY);
+
+          // Double-tap detection for Dash
+          const now = performance.now();
+          const timeDiff = now - this.lastTapTime;
+          const distDiff = Math.hypot(touchX - this.lastTapPos.x, touchY - this.lastTapPos.y);
+
+          if (timeDiff < 300 && distDiff < 50) {
+            // Double-tap confirmed: execute dash!
+            if (this.state === GAME_STATES.PLAYING) {
+              this.triggerPlayerDash();
+            }
+            this.lastTapTime = 0;
+          } else {
+            this.lastTapTime = now;
+            this.lastTapPos.set(touchX, touchY);
+          }
+        }
+      },
+      { passive: false }
+    );
+
+    window.addEventListener(
+      "touchmove",
+      (e) => {
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
+
+        // Prevent default mobile gesture scrolling
+        e.preventDefault();
+
+        if (e.touches.length > 0) {
+          const rect = this.canvas.getBoundingClientRect();
+          this.mouseScreen.set(
+            e.touches[0].clientX - rect.left,
+            e.touches[0].clientY - rect.top
+          );
+        }
+      },
+      { passive: false }
+    );
+
+    window.addEventListener(
+      "touchend",
+      (e) => {
+        if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
+          return;
+        }
+        e.preventDefault();
+      },
+      { passive: false }
+    );
 
     // UI Buttons
     if (this.ui.startBtn) {
@@ -210,16 +260,19 @@ export class Game {
       pos = new Vector2D(randomRange(-2000, 2000), randomRange(-2000, 2000));
     }
 
-    // Role Distribution: 62% Plankton, 26% Prey, 12% Predator
+    // Role Distribution: 50% Plankton, 24% Prey, 12% Parasite, 14% Predator
     const roll = Math.random();
     let type, radius;
 
-    if (roll < 0.62) {
+    if (roll < 0.50) {
       type = CELL_TYPES.PLANKTON;
       radius = randomRange(8, 14);
-    } else if (roll < 0.88) {
+    } else if (roll < 0.74) {
       type = CELL_TYPES.PREY;
       radius = randomRange(16, 36);
+    } else if (roll < 0.86) {
+      type = CELL_TYPES.PARASITE;
+      radius = randomRange(13, 20);
     } else {
       type = CELL_TYPES.PREDATOR;
       // Apex predators can be significantly larger than starting player
@@ -273,8 +326,24 @@ export class Game {
     const worldMouse = this.camera.screenToWorld(this.mouseScreen.x, this.mouseScreen.y);
     this.player.setTarget(worldMouse.x, worldMouse.y);
 
-    // 2. Update Player
-    this.player.update(dt);
+    // 2. Dynamic Arena Growth: As player grows, smoothly expand world pool
+    const baseWorldRadius = 3500;
+    const targetWorldRadius = baseWorldRadius + Math.max(0, (this.player.targetRadius - 26) * 45);
+    this.worldRadius = lerp(this.worldRadius, targetWorldRadius, 0.03);
+    this.background.worldRadius = this.worldRadius;
+
+    // 3. Update Player & Enforce Hard Boundary Clamping
+    const hitBoundary = this.player.update(dt, this.worldRadius);
+    if (hitBoundary) {
+      this.camera.addShake(4);
+      this.particles.createDashTrail(
+        this.player.pos.x,
+        this.player.pos.y,
+        this.player.pos.heading() + Math.PI,
+        "#39ff14",
+        this.player.radius * 0.7
+      );
+    }
 
     // 4. Update Camera tracking centered on player
     this.camera.update(this.player, dt);
@@ -323,6 +392,46 @@ export class Game {
       const eatDistance = (pR + cell.radius) * 0.88;
 
       if (dist < eatDistance) {
+        // Special Case: RED PARASITE leech attack!
+        if (cell.type === CELL_TYPES.PARASITE) {
+          // Drain 8% of player's mass (does NOT trigger Game Over)
+          this.player.loseMassPercent(0.08);
+
+          // Flash player in toxic blood red
+          this.player.flashTimer = 18;
+          this.player.flashColor = "#f43f5e";
+
+          // Sound, Screen Shake
+          this.sound.playLeech();
+          this.camera.addShake(7);
+
+          // Forcefully bounce parasite away to prevent continuous frame leeching
+          const knockDir = Vector2D.sub(cell.pos, pPos);
+          if (knockDir.magSq() < 0.1) knockDir.set(Math.random() - 0.5, Math.random() - 0.5);
+          knockDir.normalize();
+
+          cell.vel.set(knockDir.x * 16, knockDir.y * 16);
+          cell.pos.set(
+            pPos.x + knockDir.x * (pR + cell.radius + 32),
+            pPos.y + knockDir.y * (pR + cell.radius + 32)
+          );
+
+          // Blood red juice particles at contact point
+          const midX = (pPos.x + cell.pos.x) / 2;
+          const midY = (pPos.y + cell.pos.y) / 2;
+          this.particles.createEatBurst(midX, midY, "#f43f5e", 22, 14);
+
+          // Floating indicator text
+          this.particles.addFloatingText(
+            pPos.x,
+            pPos.y - pR - 16,
+            "-8% Leech!",
+            "#f43f5e",
+            15
+          );
+          continue;
+        }
+
         // Player is larger: EAT!
         if (pR > cell.radius * 1.05) {
           const eatenMass = Math.round(cell.mass);

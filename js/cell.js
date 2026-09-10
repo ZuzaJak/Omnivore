@@ -16,8 +16,10 @@ export class Cell {
     this.targetRadius = radius;
     this.minRadius = 10;
 
-    // Biological colors & glow
-    this.hue = options.hue !== undefined ? options.hue : randomRange(90, 145);
+    // Biological colors & glow: Alien Toxic Green & Deep Purple
+    this.hue = options.hue !== undefined
+      ? options.hue
+      : (Math.random() > 0.35 ? randomRange(95, 135) : randomRange(270, 295));
     this.saturation = options.saturation || 95;
     this.lightness = options.lightness || 54;
     this.baseColor = hsla(this.hue, this.saturation, this.lightness, 0.85);
@@ -39,6 +41,7 @@ export class Cell {
 
     // Impact / Juicing feedback
     this.flashTimer = 0;
+    this.flashColor = null;
     this.squishFactor = 1.0;
     this.stretchFactor = 1.0;
     this.elasticBounce = 0;
@@ -60,11 +63,10 @@ export class Cell {
   }
 
   get maxSpeed() {
-    // Mass-speed tradeoff: larger cells move slower
-    // Speed scales inversely with radius: v_max = base * (r_ref / r)^0.45
-    const refRadius = 24;
-    const ratio = refRadius / Math.max(12, this.radius);
-    return Math.max(1.1, this.baseMaxSpeed * Math.pow(ratio, 0.44));
+    // Rebalanced mass-speed tradeoff: gentle scaling keeps massive cells agile and fun
+    const refRadius = 26;
+    const ratio = refRadius / Math.max(16, this.radius);
+    return Math.max(2.6, this.baseMaxSpeed * Math.pow(ratio, 0.16));
   }
 
   generateOrganelles() {
@@ -143,6 +145,9 @@ export class Cell {
     // 3. Flash decay
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
+      if (this.flashTimer <= 0) {
+        this.flashColor = null;
+      }
     }
 
     // 4. Undulation phase advancement
@@ -201,7 +206,7 @@ export class Cell {
     const isFlashing = this.flashTimer > 0;
     const glowBlur = isFlashing ? 32 : Math.min(26, Math.max(12, this.radius * 0.45));
     ctx.shadowBlur = glowBlur;
-    ctx.shadowColor = isFlashing ? "#ffffff" : this.glowColor;
+    ctx.shadowColor = isFlashing ? (this.flashColor || "#ffffff") : this.glowColor;
 
     // 2. Build Organic Spline Membrane Path
     ctx.beginPath();
@@ -226,9 +231,15 @@ export class Cell {
     // 3. Translucent Cytoplasm Shading with Multi-Stop Radial Gradient
     const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 1.1);
     if (isFlashing) {
-      grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-      grad.addColorStop(0.5, hsla(this.hue, 100, 85, 0.8));
-      grad.addColorStop(1, hsla(this.hue, 100, 70, 0.9));
+      if (this.flashColor) {
+        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        grad.addColorStop(0.5, this.flashColor);
+        grad.addColorStop(1, this.flashColor);
+      } else {
+        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        grad.addColorStop(0.5, hsla(this.hue, 100, 85, 0.8));
+        grad.addColorStop(1, hsla(this.hue, 100, 70, 0.9));
+      }
     } else {
       grad.addColorStop(0, hsla(this.hue, this.saturation, 70, 0.45));
       grad.addColorStop(0.4, hsla(this.hue, this.saturation, 55, 0.35));
@@ -241,7 +252,7 @@ export class Cell {
 
     // 4. Outer Membrane Wall Stroke
     ctx.lineWidth = Math.max(1.8, Math.min(4.5, this.radius * 0.08));
-    ctx.strokeStyle = isFlashing ? "#ffffff" : hsla(this.hue, 100, 75, 0.9);
+    ctx.strokeStyle = isFlashing ? (this.flashColor || "#ffffff") : hsla(this.hue, 100, 75, 0.9);
     ctx.stroke();
 
     // 5. Internal Organelles (Nucleus & floating structures)

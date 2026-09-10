@@ -204,4 +204,32 @@ export class SoundSystem {
       osc.stop(t + 1.9);
     });
   }
+
+  playLeech() {
+    if (!this.ctx || this.isMuted) return;
+    this.resume();
+
+    const t = this.ctx.currentTime;
+    // Rapid harsh sting / biting sound
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(450, t);
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(650, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.16);
+
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(t);
+    osc.stop(t + 0.17);
+  }
 }
