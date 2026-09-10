@@ -27,8 +27,8 @@ export class Cell {
     this.coreColor = hsla((this.hue + 15) % 360, 100, 80, 0.95);
 
     // Physics parameters (Viscous fluid mechanics)
-    this.drag = options.drag || 0.94;
-    this.baseMaxSpeed = options.baseMaxSpeed || 5.2;
+    this.drag = options.drag || 0.92;
+    this.baseMaxSpeed = options.baseMaxSpeed || 3.2;
 
     // Organic membrane undulation settings
     this.numVertices = Math.max(20, Math.min(36, Math.floor(radius * 0.8)));
@@ -66,7 +66,7 @@ export class Cell {
     // Rebalanced mass-speed tradeoff: gentle scaling keeps massive cells agile and fun
     const refRadius = 26;
     const ratio = refRadius / Math.max(16, this.radius);
-    return Math.max(2.6, this.baseMaxSpeed * Math.pow(ratio, 0.16));
+    return Math.max(1.6, this.baseMaxSpeed * Math.pow(ratio, 0.16));
   }
 
   generateOrganelles() {
@@ -130,7 +130,10 @@ export class Cell {
   update(dt = 1) {
     // 1. Viscous fluid physics integration
     this.vel.add(this.acc);
-    this.vel.limit(this.maxSpeed);
+    const speedCap = (this.dashGlowTimer && this.dashGlowTimer > 0)
+      ? this.maxSpeed * 2.8
+      : this.maxSpeed;
+    this.vel.limit(speedCap);
     this.vel.mult(this.drag);
     this.pos.add(this.vel);
     this.acc.set(0, 0);

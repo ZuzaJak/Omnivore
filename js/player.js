@@ -13,8 +13,8 @@ export class Player extends Cell {
       hue: 120, // Bioluminescent Toxic Neon Green
       saturation: 100,
       lightness: 54,
-      drag: 0.94,
-      baseMaxSpeed: 5.6
+      drag: 0.90, // Increased viscous fluid damping (was 0.94)
+      baseMaxSpeed: 3.2 // Relaxed, manageable swim speed (was 5.6)
     });
 
     // Swimming & cilia locomotion state
@@ -22,10 +22,10 @@ export class Player extends Cell {
     this.ciliaPhase = 0;
     this.ciliaBaseLength = 9;
 
-    // Dash mechanic state
+    // Dash mechanic state (balanced to 3.2 baseline)
     this.dashCooldown = 0;
-    this.dashCooldownMax = 22; // ~0.35s at 60fps
-    this.dashForce = 14.5;
+    this.dashCooldownMax = 20; // ~0.33s at 60fps
+    this.dashForce = 8.6; // Responsive burst without losing control (was 14.5)
     this.dashCostPercent = 0.035; // 3.5% of mass per dash
     this.isDashing = false;
     this.dashGlowTimer = 0;
@@ -78,16 +78,21 @@ export class Player extends Cell {
   }
 
   update(dt = 1, worldRadius = null) {
-    // 1. Swim towards cursor with viscous fluid inertia
+    // 1. Swim towards cursor/touch with viscous fluid inertia
     const toTarget = Vector2D.sub(this.targetPos, this.pos);
     const distToTarget = toTarget.mag();
+    const deadzone = 8;
 
-    if (distToTarget > 4) {
+    if (distToTarget > deadzone) {
       toTarget.normalize();
-      // Distance easing: Gentle thrust when close, full thrust when far
-      const thrustScale = Math.min(1, distToTarget / 70);
-      const thrust = 0.42 * thrustScale;
+      // Smooth distance easing over 90px prevents target overshooting
+      const easeRadius = 90;
+      const thrustScale = Math.min(1, (distToTarget - deadzone) / easeRadius);
+      const thrust = 0.28 * thrustScale;
       this.applyForce(toTarget.mult(thrust));
+    } else {
+      // Viscous deceleration within deadzone to settle smoothly under pointer
+      this.vel.mult(0.85);
     }
 
     // 2. Dash cooldown and glow decay

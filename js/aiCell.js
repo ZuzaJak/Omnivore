@@ -23,32 +23,32 @@ export class AICell extends Cell {
       hue = randomChoice([95, 110, 120, 135]); // Toxic neon green, chartreuse, lime
       saturation = 100;
       lightness = 60;
-      baseMaxSpeed = 2.4;
+      baseMaxSpeed = 1.4;
     } else if (type === CELL_TYPES.PREY) {
       // Dynamic mix of toxic neon green and bioluminescent alien violet
       hue = randomChoice([115, 130, 265, 285]); 
       saturation = 95;
       lightness = 55;
-      baseMaxSpeed = 4.8;
+      baseMaxSpeed = 2.8;
     } else if (type === CELL_TYPES.PARASITE) {
       // Crimson / Blood Red swarm parasite (Hue ~350-10)
       hue = randomChoice([345, 355, 2, 12]);
       saturation = 100;
       lightness = 52;
-      baseMaxSpeed = 5.8;
+      baseMaxSpeed = 3.6;
     } else {
       // PREDATOR: Deep glowing alien purple / violet (~280)
       hue = randomChoice([275, 280, 288, 295]); 
       saturation = 100;
       lightness = 50;
-      baseMaxSpeed = 4.2;
+      baseMaxSpeed = 2.6;
     }
 
     super(x, y, radius, {
       hue,
       saturation,
       lightness,
-      drag: 0.94,
+      drag: 0.91,
       baseMaxSpeed
     });
 
@@ -82,7 +82,7 @@ export class AICell extends Cell {
     // 2. Plankton just gently drifts
     if (this.type === CELL_TYPES.PLANKTON) {
       this.wanderAngle += (Math.random() - 0.5) * 0.4;
-      const wander = Vector2D.fromAngle(this.wanderAngle, 0.08);
+      const wander = Vector2D.fromAngle(this.wanderAngle, 0.05);
       this.applyForce(wander);
       return;
     }
@@ -98,13 +98,13 @@ export class AICell extends Cell {
           // Add organic twitchy swarm jitter
           const jitter = Vector2D.fromAngle(Math.random() * Math.PI * 2, 0.35);
           toPlayer.add(jitter).normalize();
-          this.applyForce(toPlayer.mult(0.68));
+          this.applyForce(toPlayer.mult(0.42));
           return;
         }
       }
       // Out of range: Rapid search wander
       this.wanderAngle += (Math.random() - 0.5) * 0.45;
-      const wander = Vector2D.fromAngle(this.wanderAngle, 0.35);
+      const wander = Vector2D.fromAngle(this.wanderAngle, 0.22);
       this.applyForce(wander);
       return;
     }
@@ -158,17 +158,17 @@ export class AICell extends Cell {
     if (closestThreat) {
       const fleeVec = Vector2D.sub(this.pos, closestThreat.pos).normalize();
       const urgency = clamp(1 - (closestThreatDist / this.sensorRadius), 0.3, 1.0);
-      steerForce.add(fleeVec.mult(0.55 * urgency));
+      steerForce.add(fleeVec.mult(0.36 * urgency));
     }
     // Priority B: Hunt edible prey
     else if (closestFood) {
       const huntVec = Vector2D.sub(closestFood.pos, this.pos).normalize();
-      steerForce.add(huntVec.mult(0.38));
+      steerForce.add(huntVec.mult(0.24));
     }
     // Priority C: Ambient fluid wandering
     else {
       this.wanderAngle += (Math.random() - 0.5) * this.wanderChangeSpeed * 5;
-      const wander = Vector2D.fromAngle(this.wanderAngle, 0.18);
+      const wander = Vector2D.fromAngle(this.wanderAngle, 0.12);
       steerForce.add(wander);
     }
 
