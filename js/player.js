@@ -32,6 +32,9 @@ export class Player extends Cell {
 
     // Target position (world coordinates from mouse)
     this.targetPos = new Vector2D(x, y);
+
+    // World boundary default
+    this.worldRadius = 3500;
   }
 
   setTarget(worldX, worldY) {
@@ -74,7 +77,7 @@ export class Player extends Cell {
     };
   }
 
-  update(dt = 1) {
+  update(dt = 1, worldRadius = null) {
     // 1. Swim towards cursor with viscous fluid inertia
     const toTarget = Vector2D.sub(this.targetPos, this.pos);
     const distToTarget = toTarget.mag();
@@ -99,18 +102,17 @@ export class Player extends Cell {
     super.update(dt);
 
     // 5. Hard World Boundary Clamping & Elastic Bounce
-    if (worldRadius) {
-      const dist = this.pos.mag();
-      const maxDist = Math.max(10, worldRadius - this.radius);
-      if (dist > maxDist) {
-        const norm = this.pos.clone().normalize();
-        this.pos.set(norm.x * maxDist, norm.y * maxDist);
-        const outward = this.vel.x * norm.x + this.vel.y * norm.y;
-        if (outward > 0) {
-          // Reflect velocity inward with elastic bounce
-          this.vel.sub(norm.mult(outward * 1.5));
-          return true; // Boundary hit!
-        }
+    const activeRadius = worldRadius || this.worldRadius || 3500;
+    const dist = this.pos.mag();
+    const maxDist = Math.max(10, activeRadius - this.radius);
+    if (dist > maxDist) {
+      const norm = this.pos.clone().normalize();
+      this.pos.set(norm.x * maxDist, norm.y * maxDist);
+      const outward = this.vel.x * norm.x + this.vel.y * norm.y;
+      if (outward > 0) {
+        // Reflect velocity inward with elastic bounce
+        this.vel.sub(norm.mult(outward * 1.5));
+        return true; // Boundary hit!
       }
     }
     return false;

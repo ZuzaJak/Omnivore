@@ -6,9 +6,17 @@
 
 import { Game } from "./game.js";
 
+let isGameInitialized = false;
+
 function init() {
+  if (isGameInitialized) return;
+
   const canvas = document.getElementById("game-canvas");
-  if (!canvas) return;
+  if (!canvas) {
+    console.warn("Omnivore: #game-canvas not yet found, waiting for DOM...");
+    return;
+  }
+  isGameInitialized = true;
 
   const uiElements = {
     startScreen: document.getElementById("start-screen"),
@@ -34,9 +42,10 @@ function init() {
   requestAnimationFrame((timestamp) => game.loop(timestamp));
 }
 
-// Ensure execution even if script is injected after DOMContentLoaded
+// Ensure execution whether DOM is currently loading or already loaded
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
+  // DOM is already ready (interactive or complete), initialize immediately
   init();
 }
