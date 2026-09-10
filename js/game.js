@@ -369,6 +369,7 @@ export class Game {
     // 3. Update Player & Enforce Hard Boundary Clamping
     const hitBoundary = this.player.update(dt, this.worldRadius);
     if (hitBoundary) {
+      this.sound.playBounce();
       this.camera.addShake(4);
       this.particles.createDashTrail(
         this.player.pos.x,
