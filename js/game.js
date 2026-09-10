@@ -10,7 +10,7 @@ import { Camera } from "./camera.js";
 import { BackgroundSystem } from "./background.js";
 import { ParticleManager } from "./particle.js";
 import { SoundSystem } from "./audio.js";
-import { Vector2D, randomRange, randomChoice } from "./math.js";
+import { Vector2D, randomRange, randomChoice, lerp } from "./math.js";
 
 export const GAME_STATES = {
   START: "start",
@@ -18,6 +18,25 @@ export const GAME_STATES = {
   GAME_OVER: "game_over",
   PAUSED: "paused"
 };
+
+/**
+ * Safe localStorage wrappers to prevent SecurityError in sandboxed/file contexts
+ */
+function safeGetStorage(key, fallback = "0") {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function safeSetStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    // Storage access restricted or disabled
+  }
+}
 
 export class Game {
   constructor(canvas, uiElements) {
@@ -42,7 +61,7 @@ export class Game {
 
     // Metrics
     this.score = 0;
-    this.highScore = parseInt(localStorage.getItem("omnivore_high_score") || "0", 10);
+    this.highScore = parseInt(safeGetStorage("omnivore_high_score", "0"), 10);
     this.cellsEaten = 0;
     this.startTime = 0;
     this.timeSurvived = 0;
@@ -162,16 +181,31 @@ export class Game {
       { passive: false }
     );
 
-    // UI Buttons
-    if (this.ui.startBtn) {
-      this.ui.startBtn.addEventListener("click", () => this.start());
-    }
-    if (this.ui.restartBtn) {
-      this.ui.restartBtn.addEventListener("click", () => this.start());
-    }
-    if (this.ui.muteBtn) {
-      this.ui.muteBtn.addEventListener("click", () => this.toggleAudio());
-    }
+    // UI Buttons: Fast-response touch and click binding
+    const attachButtonHandler = (btn, action) => {
+      if (!btn) return;
+      let lastTrigger = 0;
+      const trigger = (e) => {
+        const now = performance.now();
+        if (now - lastTrigger < 300) return;
+        lastTrigger = now;
+        action(e);
+      };
+      btn.addEventListener("click", trigger);
+      btn.addEventListener(
+        "touchend",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          trigger(e);
+        },
+        { passive: false }
+      );
+    };
+
+    attachButtonHandler(this.ui.startBtn, () => this.start());
+    attachButtonHandler(this.ui.restartBtn, () => this.start());
+    attachButtonHandler(this.ui.muteBtn, () => this.toggleAudio());
   }
 
   resize() {
@@ -449,7 +483,7 @@ export class Game {
           this.score += eatenMass;
           if (this.score > this.highScore) {
             this.highScore = this.score;
-            localStorage.setItem("omnivore_high_score", this.highScore.toString());
+            safeSetStorage("omnivore_high_score", this.highScore.toString());
           }
 
           // Floating score text
@@ -584,16 +618,23 @@ export class Game {
   }
 
   loop(timestamp) {
-    if (!this.lastTimestamp) this.lastTimestamp = timestamp;
-    const elapsed = timestamp - this.lastTimestamp;
-    this.lastTimestamp = timestamp;
+    try {
+      if (!this.lastTimestamp) this.lastTimestamp = timestamp;
+      const elapsed = timestamp - this.lastTimestamp;
+      this.lastTimestamp = timestamp;
 
-    // Normalizing dt around 60fps (dt = 1 at 16.6ms), capped to prevent spiraling
-    const dt = Math.min(2.5, elapsed / 16.67);
+      // Normalizing dt around 60fps (dt = 1 at 16.6ms), capped to prevent spiraling
+      const dt = Math.min(2.5, elapsed / 16.67);
 
-    this.update(dt);
-    this.render();
+      this.update(dt);
+      this.render();
 
-    requestAnimationFrame((t) => this.loop(t));
+      requestAnimationFrame((t) => this.loop(t));
+    } catch (err) {
+      console.error("Omnivore Game Loop Exception:", err);
+      if (typeof window.showFatalError === "function") {
+        window.showFatalError(err.message, "js/game.js (Game.loop)", 0, 0, err);
+      }
+    }
   }
 }

@@ -1656,6 +1656,25 @@ const GAME_STATES = {
   GAME_OVER: "game_over",
   PAUSED: "paused"
 };
+
+/**
+ * Safe localStorage wrappers to prevent SecurityError in sandboxed/file contexts
+ */
+function safeGetStorage(key, fallback = "0") {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+function safeSetStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    // Storage access restricted or disabled
+  }
+}
 class Game {
   constructor(canvas, uiElements) {
     this.canvas = canvas;
@@ -1679,7 +1698,7 @@ class Game {
 
     // Metrics
     this.score = 0;
-    this.highScore = parseInt(localStorage.getItem("omnivore_high_score") || "0", 10);
+    this.highScore = parseInt(safeGetStorage("omnivore_high_score", "0"), 10);
     this.cellsEaten = 0;
     this.startTime = 0;
     this.timeSurvived = 0;
@@ -1799,16 +1818,31 @@ class Game {
       { passive: false }
     );
 
-    // UI Buttons
-    if (this.ui.startBtn) {
-      this.ui.startBtn.addEventListener("click", () => this.start());
-    }
-    if (this.ui.restartBtn) {
-      this.ui.restartBtn.addEventListener("click", () => this.start());
-    }
-    if (this.ui.muteBtn) {
-      this.ui.muteBtn.addEventListener("click", () => this.toggleAudio());
-    }
+    // UI Buttons: Fast-response touch and click binding
+    const attachButtonHandler = (btn, action) => {
+      if (!btn) return;
+      let lastTrigger = 0;
+      const trigger = (e) => {
+        const now = performance.now();
+        if (now - lastTrigger < 300) return;
+        lastTrigger = now;
+        action(e);
+      };
+      btn.addEventListener("click", trigger);
+      btn.addEventListener(
+        "touchend",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          trigger(e);
+        },
+        { passive: false }
+      );
+    };
+
+    attachButtonHandler(this.ui.startBtn, () => this.start());
+    attachButtonHandler(this.ui.restartBtn, () => this.start());
+    attachButtonHandler(this.ui.muteBtn, () => this.toggleAudio());
   }
 
   resize() {
@@ -2086,7 +2120,7 @@ class Game {
           this.score += eatenMass;
           if (this.score > this.highScore) {
             this.highScore = this.score;
-            localStorage.setItem("omnivore_high_score", this.highScore.toString());
+            safeSetStorage("omnivore_high_score", this.highScore.toString());
           }
 
           // Floating score text
@@ -2221,17 +2255,24 @@ class Game {
   }
 
   loop(timestamp) {
-    if (!this.lastTimestamp) this.lastTimestamp = timestamp;
-    const elapsed = timestamp - this.lastTimestamp;
-    this.lastTimestamp = timestamp;
+    try {
+      if (!this.lastTimestamp) this.lastTimestamp = timestamp;
+      const elapsed = timestamp - this.lastTimestamp;
+      this.lastTimestamp = timestamp;
 
-    // Normalizing dt around 60fps (dt = 1 at 16.6ms), capped to prevent spiraling
-    const dt = Math.min(2.5, elapsed / 16.67);
+      // Normalizing dt around 60fps (dt = 1 at 16.6ms), capped to prevent spiraling
+      const dt = Math.min(2.5, elapsed / 16.67);
 
-    this.update(dt);
-    this.render();
+      this.update(dt);
+      this.render();
 
-    requestAnimationFrame((t) => this.loop(t));
+      requestAnimationFrame((t) => this.loop(t));
+    } catch (err) {
+      console.error("Omnivore Game Loop Exception:", err);
+      if (typeof window.showFatalError === "function") {
+        window.showFatalError(err.message, "js/game.js (Game.loop)", 0, 0, err);
+      }
+    }
   }
 }
 
@@ -2248,44 +2289,61 @@ let isGameInitialized = false;
 function init() {
   if (isGameInitialized) return;
 
-  const canvas = document.getElementById("game-canvas");
-  if (!canvas) {
-    console.warn("Omnivore: #game-canvas not yet found, waiting for DOM...");
-    return;
+  try {
+    const canvas = document.getElementById("game-canvas");
+    if (!canvas) {
+      console.warn("Omnivore: #game-canvas not yet found, waiting for DOM...");
+      return;
+    }
+    isGameInitialized = true;
+
+    const uiElements = {
+      startScreen: document.getElementById("start-screen"),
+      startBtn: document.getElementById("start-btn"),
+      gameOverScreen: document.getElementById("game-over-screen"),
+      restartBtn: document.getElementById("restart-btn"),
+      pauseModal: document.getElementById("pause-modal"),
+      muteBtn: document.getElementById("mute-btn"),
+      hud: document.getElementById("hud"),
+      massVal: document.getElementById("hud-mass-val"),
+      scoreVal: document.getElementById("hud-score-val"),
+      timeVal: document.getElementById("hud-time-val"),
+      dashIndicator: document.getElementById("hud-dash-indicator"),
+      finalMassVal: document.getElementById("final-mass-val"),
+      finalScoreVal: document.getElementById("final-score-val"),
+      finalTimeVal: document.getElementById("final-time-val"),
+      finalBestVal: document.getElementById("final-best-val")
+    };
+
+    const game = new Game(canvas, uiElements);
+
+    // Start the render/update loop
+    requestAnimationFrame((timestamp) => game.loop(timestamp));
+    console.log("Omnivore: Core engine successfully mounted and running.");
+  } catch (err) {
+    console.error("Omnivore Initialization Crash:", err);
+    if (typeof window.showFatalError === "function") {
+      window.showFatalError(err.message, "js/main.js (init)", 0, 0, err);
+    }
   }
-  isGameInitialized = true;
-
-  const uiElements = {
-    startScreen: document.getElementById("start-screen"),
-    startBtn: document.getElementById("start-btn"),
-    gameOverScreen: document.getElementById("game-over-screen"),
-    restartBtn: document.getElementById("restart-btn"),
-    pauseModal: document.getElementById("pause-modal"),
-    muteBtn: document.getElementById("mute-btn"),
-    hud: document.getElementById("hud"),
-    massVal: document.getElementById("hud-mass-val"),
-    scoreVal: document.getElementById("hud-score-val"),
-    timeVal: document.getElementById("hud-time-val"),
-    dashIndicator: document.getElementById("hud-dash-indicator"),
-    finalMassVal: document.getElementById("final-mass-val"),
-    finalScoreVal: document.getElementById("final-score-val"),
-    finalTimeVal: document.getElementById("final-time-val"),
-    finalBestVal: document.getElementById("final-best-val")
-  };
-
-  const game = new Game(canvas, uiElements);
-
-  // Start the render/update loop
-  requestAnimationFrame((timestamp) => game.loop(timestamp));
 }
 
-// Ensure execution whether DOM is currently loading or already loaded
-if (document.readyState === "loading") {
+// 1. Immediate attempt: if canvas already exists in parsed DOM, mount immediately
+if (document.getElementById("game-canvas")) {
+  init();
+} else if (document.readyState === "loading") {
+  // 2. Otherwise listen for DOM readiness
   document.addEventListener("DOMContentLoaded", init);
 } else {
-  // DOM is already ready (interactive or complete), initialize immediately
+  // 3. Fallback for interactive/complete readyState
   init();
 }
+
+// 4. Ultimate fallback if dynamic script was delayed past standard events
+window.addEventListener("load", () => {
+  if (!isGameInitialized) init();
+});
+
 
 
 })();

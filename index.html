@@ -8,6 +8,53 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Runtime Diagnostic Overlay: Captures and displays any silent initialization or game-loop failures -->
+  <script>
+    window.showFatalError = function(msg, src, lineno, colno, err) {
+      console.error("Omnivore Crash Report:", msg, src, lineno, colno, err);
+      var box = document.getElementById("debug-error-box");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "debug-error-box";
+        box.style.cssText = "position:fixed;top:12px;left:12px;right:12px;z-index:9999999;background:rgba(26,5,16,0.96);border:2px solid #ff0055;border-radius:10px;padding:16px;color:#fca5a5;font-family:monospace;font-size:13px;line-height:1.5;box-shadow:0 0 40px rgba(255,0,85,0.7);max-height:80vh;overflow-y:auto;pointer-events:auto;";
+        var heading = document.createElement("div");
+        heading.style.cssText = "font-weight:bold;font-size:15px;color:#fff;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,0,85,0.4);padding-bottom:8px;";
+        heading.innerHTML = "<span style='display:flex;align-items:center;gap:8px;'>⚠️ <strong>Omnivore Diagnostic Crash Log</strong></span><button onclick='this.parentElement.parentElement.remove()' style='background:#ff0055;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:bold;'>Dismiss</button>";
+        box.appendChild(heading);
+        var list = document.createElement("div");
+        list.id = "debug-error-list";
+        box.appendChild(list);
+        if (document.body) {
+          document.body.appendChild(box);
+        } else {
+          document.addEventListener("DOMContentLoaded", function() {
+            document.body.appendChild(box);
+          });
+        }
+      }
+      var list = document.getElementById("debug-error-list");
+      if (list) {
+        var item = document.createElement("div");
+        item.style.cssText = "background:rgba(0,0,0,0.5);border-left:3px solid #ff0055;padding:10px;margin-top:8px;border-radius:4px;word-break:break-word;";
+        var errorMsg = msg || (err && err.message) || "Unknown Error";
+        var html = "<div style='color:#f87171;font-weight:bold;margin-bottom:4px;'>" + errorMsg + "</div>";
+        if (src) html += "<div style='color:#94a3b8;font-size:11px;'>Location: " + src + (lineno ? ":" + lineno : "") + (colno ? ":" + colno : "") + "</div>";
+        if (err && err.stack) {
+          html += "<pre style='color:#cbd5e1;font-size:11px;margin:8px 0 0 0;white-space:pre-wrap;background:rgba(0,0,0,0.3);padding:6px;border-radius:3px;'>" + err.stack + "</pre>";
+        }
+        item.innerHTML = html;
+        list.appendChild(item);
+      }
+    };
+
+    window.addEventListener("error", function(e) {
+      window.showFatalError(e.message, e.filename, e.lineno, e.colno, e.error);
+    });
+    window.addEventListener("unhandledrejection", function(e) {
+      window.showFatalError("Unhandled Promise: " + (e.reason ? (e.reason.message || e.reason) : "Unknown"), "", 0, 0, e.reason);
+    });
+  </script>
 </head>
 <body>
   <div id="game-container">
@@ -139,16 +186,25 @@
 
   <!-- Game Bootstrap: Supports both direct file:/// double-click and http server ES modules -->
   <script>
-    if (window.location.protocol === "file:") {
-      const script = document.createElement("script");
+    const isFileProto = window.location.protocol === "file:";
+    const script = document.createElement("script");
+    script.async = false;
+    if (isFileProto) {
       script.src = "js/bundle.js";
-      document.body.appendChild(script);
     } else {
-      const script = document.createElement("script");
       script.type = "module";
       script.src = "js/main.js";
-      document.body.appendChild(script);
     }
+    script.onerror = function(err) {
+      window.showFatalError(
+        "Failed to load engine script: " + script.src + ". Verify the file exists in the directory.",
+        script.src,
+        0,
+        0,
+        err
+      );
+    };
+    document.body.appendChild(script);
   </script>
 </body>
 </html>
