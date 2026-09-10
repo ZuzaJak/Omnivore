@@ -1,0 +1,354 @@
+/* =========================================================
+   Omnivore - Visual Styling & Primordial Abyss Theme
+   Dark matter aesthetics, glassmorphic HUD, bioluminescent glow
+   ========================================================= */
+
+:root {
+  --bg-deep: #02040a;
+  --bg-abyss: #040d1a;
+  --cyan-glow: #38bdf8;
+  --cyan-bright: #67e8f9;
+  --text-main: #f0f9ff;
+  --text-muted: #94a3b8;
+  --glass-bg: rgba(6, 17, 34, 0.65);
+  --glass-border: rgba(56, 189, 248, 0.22);
+  --glass-glow: rgba(56, 189, 248, 0.15);
+  --danger: #f43f5e;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-deep);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-main);
+}
+
+#game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-deep);
+  cursor: crosshair;
+}
+
+#game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* =========================================================
+   HUD (Heads Up Display)
+   ========================================================= */
+#hud {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  z-index: 10;
+}
+
+.hud-panel {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px var(--glass-glow);
+  padding: 10px 20px;
+  border-radius: 12px;
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.hud-val {
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--cyan-bright);
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+/* Dash Status Indicator */
+.hud-dash {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+  padding: 8px 16px;
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.dash-pill {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.2s ease;
+}
+
+.hud-dash.ready .dash-pill {
+  background: var(--cyan-bright);
+  box-shadow: 0 0 10px var(--cyan-glow);
+  transform: scale(1.15);
+}
+
+.hud-dash.ready .hud-label {
+  color: var(--text-main);
+}
+
+.hud-dash.recharging .dash-pill {
+  background: #475569;
+}
+
+/* Top Right Audio Controls */
+#top-controls {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
+}
+
+.icon-btn {
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+  color: var(--cyan-bright);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 20px var(--glass-glow);
+}
+
+.icon-btn:hover {
+  background: rgba(14, 38, 70, 0.85);
+  border-color: var(--cyan-bright);
+  box-shadow: 0 0 16px var(--cyan-glow);
+  transform: translateY(-1px);
+}
+
+.icon-btn.muted {
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+/* =========================================================
+   Glassmorphic Modals & Screens
+   ========================================================= */
+.screen-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 15, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 50;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.screen-card {
+  background: rgba(5, 16, 34, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 35px rgba(56, 189, 248, 0.2);
+  border-radius: 20px;
+  padding: 44px 52px;
+  text-align: center;
+  max-width: 520px;
+  width: 90%;
+  position: relative;
+  animation: modalFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.title-container {
+  margin-bottom: 24px;
+}
+
+.game-title {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 0 24px rgba(56, 189, 248, 0.8), 0 0 45px rgba(56, 189, 248, 0.4);
+  margin-bottom: 6px;
+}
+
+.game-subtitle {
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--cyan-glow);
+  opacity: 0.9;
+}
+
+.game-tagline {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+/* Instructions Grid */
+.instructions-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.instruction-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(10, 25, 48, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.inst-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.inst-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.inst-text strong {
+  display: block;
+  color: var(--cyan-bright);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+/* Buttons */
+.primary-btn {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  border: 1px solid rgba(125, 211, 252, 0.5);
+  padding: 16px 40px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(2, 132, 199, 0.4);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-block;
+  width: 100%;
+}
+
+.primary-btn:hover {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+  box-shadow: 0 6px 32px rgba(56, 189, 248, 0.6);
+  transform: translateY(-2px);
+}
+
+.primary-btn:active {
+  transform: translateY(1px);
+}
+
+/* Game Over Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin: 24px 0 32px 0;
+}
+
+.stat-box {
+  background: rgba(10, 25, 48, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stat-val {
+  font-family: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--cyan-bright);
+}
+
+.stat-val.highlight {
+  color: #facc15;
+  text-shadow: 0 0 14px rgba(250, 204, 21, 0.5);
+}
+
+/* Utility */
+.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Omnivore — A Primordial Microcosm</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Main Simulation Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- In-Game HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-panel">
+        <div class="hud-item">
+          <span class="hud-label">Mass</span>
+          <span id="hud-mass-val" class="hud-val">2,123</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">Score</span>
+          <span id="hud-score-val" class="hud-val">0</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">Time</span>
+          <span id="hud-time-val" class="hud-val">0:00</span>
+        </div>
+      </div>
+
+      <div id="hud-dash-indicator" class="hud-dash ready">
+        <span class="dash-pill"></span>
+        <span class="hud-label">Dash [Click / Space]</span>
+      </div>
+    </div>
+
+    <!-- Top Right Controls -->
+    <div id="top-controls">
+      <button id="mute-btn" class="icon-btn" aria-label="Toggle sound" title="Toggle audio [M]">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Start / Introduction Screen -->
+    <div id="start-screen" class="screen-overlay">
+      <div class="screen-card">
+        <div class="title-container">
+          <h1 class="game-title">Omnivore</h1>
+          <div class="game-subtitle">Primordial Microcosm</div>
+        </div>
+
+        <p class="game-tagline">
+          Evolve in the dark abyss of a living microscopic soup. Consume lesser organisms to assimilate their mass and evade bioluminescent apex predators.
+        </p>
+
+        <div class="instructions-list">
+          <div class="instruction-item">
+            <div class="inst-icon">🌊</div>
+            <div class="inst-text">
+              <strong>Fluid Locomotion</strong>
+              Move cursor to steer amoeba with viscous inertia
+            </div>
+          </div>
+          <div class="instruction-item">
+            <div class="inst-icon">⚡</div>
+            <div class="inst-text">
+              <strong>Jet Dash</strong>
+              Left-click to dash forward (costs small % of mass)
+            </div>
+          </div>
+          <div class="instruction-item">
+            <div class="inst-icon">🦠</div>
+            <div class="inst-text">
+              <strong>Assimilate Prey</strong>
+              Engulf smaller glowing cells to expand your volume
+            </div>
+          </div>
+          <div class="instruction-item">
+            <div class="inst-icon">⚠️</div>
+            <div class="inst-text">
+              <strong>Apex Predators</strong>
+              Flee larger predators; mass slows your swim speed
+            </div>
+          </div>
+        </div>
+
+        <button id="start-btn" class="primary-btn">Enter Primordial Fluid</button>
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen-overlay hidden">
+      <div class="screen-card">
+        <div class="title-container">
+          <h1 class="game-title" style="color: var(--danger); text-shadow: 0 0 25px rgba(244, 63, 94, 0.7);">Consumed</h1>
+          <div class="game-subtitle">Organism Dissolved by Apex Predator</div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <span class="stat-label">Final Mass</span>
+            <span id="final-mass-val" class="stat-val">0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Score</span>
+            <span id="final-score-val" class="stat-val">0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Survial Time</span>
+            <span id="final-time-val" class="stat-val">0:00</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">All-Time Best</span>
+            <span id="final-best-val" class="stat-val highlight">0</span>
+          </div>
+        </div>
+
+        <button id="restart-btn" class="primary-btn">Reconstitute Organism</button>
+      </div>
+    </div>
+
+    <!-- Pause Modal -->
+    <div id="pause-modal" class="screen-overlay hidden">
+      <div class="screen-card" style="max-width: 380px;">
+        <div class="title-container">
+          <h2 class="game-title" style="font-size: 32px;">Suspended</h2>
+          <div class="game-subtitle">Fluid Stasis</div>
+        </div>
+        <p class="game-tagline" style="margin-bottom: 24px;">Press [P] or [ESC] to resume motility.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Bootstrap: Supports both direct file:/// double-click and http server ES modules -->
+  <script>
+    if (window.location.protocol === "file:") {
+      const script = document.createElement("script");
+      script.src = "js/bundle.js";
+      document.body.appendChild(script);
+    } else {
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = "js/main.js";
+      document.body.appendChild(script);
+    }
+  </script>
+</body>
+</html>
