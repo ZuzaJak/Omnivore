@@ -28,7 +28,7 @@ export class BackgroundSystem {
         y: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
         radius: randomRange(minR, maxR),
         alpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(170, 240), // Cyan, deep turquoise, abyssal indigo
+        hue: randomRange(95, 145), // Toxic neon green, biohazard lime, emerald spores
         driftAngle: Math.random() * Math.PI * 2,
         driftSpeed: randomRange(0.08, 0.22),
         pulseSpeed: randomRange(0.008, 0.02),
@@ -46,7 +46,7 @@ export class BackgroundSystem {
         y: randomRange(-this.worldRadius, this.worldRadius),
         radius: randomRange(minR, maxR),
         baseAlpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(160, 210),
+        hue: randomRange(90, 140),
         vx: randomRange(-0.15, 0.15),
         vy: randomRange(-0.15, 0.15),
         flickerPhase: Math.random() * Math.PI * 2,
@@ -79,9 +79,9 @@ export class BackgroundSystem {
       viewWidth / 2, viewHeight / 2, 80,
       viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.75
     );
-    bgGrad.addColorStop(0, "#051329"); // Deep abyssal cyan-tinted core
-    bgGrad.addColorStop(0.55, "#020714"); // Dark abyss indigo
-    bgGrad.addColorStop(1, "#010308"); // Void black edge
+    bgGrad.addColorStop(0, "#041c0e"); // Deep murky toxic green core
+    bgGrad.addColorStop(0.55, "#020f06"); // Dark abyss swamp green
+    bgGrad.addColorStop(1, "#010602"); // Void bio-black edge
 
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
@@ -145,7 +145,7 @@ export class BackgroundSystem {
     const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
 
     // Subtle fluid coordinate grid points & faint lines
-    ctx.strokeStyle = "rgba(40, 110, 160, 0.08)";
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.08)";
     ctx.lineWidth = 1;
 
     ctx.beginPath();
@@ -160,7 +160,7 @@ export class BackgroundSystem {
     ctx.stroke();
 
     // Fine glowing coordinate nodes
-    ctx.fillStyle = "rgba(70, 190, 230, 0.18)";
+    ctx.fillStyle = "rgba(57, 255, 20, 0.25)";
     for (let x = startX; x <= endX; x += this.gridSpacing) {
       for (let y = startY; y <= endY; y += this.gridSpacing) {
         ctx.beginPath();
@@ -170,10 +170,10 @@ export class BackgroundSystem {
     }
 
     // World Boundary Membrane (Primordial bio-barrier ring)
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+    ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
     ctx.lineWidth = 6;
     ctx.shadowBlur = 28;
-    ctx.shadowColor = "#0284c7";
+    ctx.shadowColor = "#22c55e";
     ctx.beginPath();
     ctx.arc(0, 0, this.worldRadius, 0, Math.PI * 2);
     ctx.stroke();

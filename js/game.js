@@ -241,7 +241,7 @@ export class Game {
         dashResult.ejectX,
         dashResult.ejectY,
         dashResult.oppositeAngle,
-        "#38bdf8",
+        "#39ff14",
         this.player.radius
       );
 
@@ -254,7 +254,7 @@ export class Game {
         this.player.pos.x,
         this.player.pos.y - this.player.radius - 12,
         "-Dash",
-        "#7dd3fc",
+        "#4ade80",
         13
       );
     }
@@ -395,7 +395,7 @@ export class Game {
     // Big death impact
     this.sound.playDeath();
     this.camera.addShake(18);
-    this.particles.createEatBurst(this.player.pos.x, this.player.pos.y, "#38bdf8", 36, this.player.radius * 1.4);
+    this.particles.createEatBurst(this.player.pos.x, this.player.pos.y, "#39ff14", 36, this.player.radius * 1.4);
 
     // Show Game Over Modal
     if (this.ui.gameOverScreen) {

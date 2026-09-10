@@ -17,12 +17,12 @@ export class Cell {
     this.minRadius = 10;
 
     // Biological colors & glow
-    this.hue = options.hue !== undefined ? options.hue : randomRange(170, 290);
-    this.saturation = options.saturation || 90;
-    this.lightness = options.lightness || 55;
+    this.hue = options.hue !== undefined ? options.hue : randomRange(90, 145);
+    this.saturation = options.saturation || 95;
+    this.lightness = options.lightness || 54;
     this.baseColor = hsla(this.hue, this.saturation, this.lightness, 0.85);
     this.glowColor = hsla(this.hue, 100, 65, 0.9);
-    this.coreColor = hsla((this.hue + 20) % 360, 100, 80, 0.95);
+    this.coreColor = hsla((this.hue + 15) % 360, 100, 80, 0.95);
 
     // Physics parameters (Viscous fluid mechanics)
     this.drag = options.drag || 0.94;
@@ -93,7 +93,7 @@ export class Cell {
         sizeRatio: randomRange(0.12, 0.22),
         aspect: randomRange(1.4, 2.4),
         orbitSpeed: randomRange(-0.006, 0.006),
-        color: hsla((this.hue + randomRange(-35, 35) + 360) % 360, 85, 70, 0.55)
+        color: hsla((this.hue + randomRange(-15, 15) + 360) % 360, 85, 70, 0.55)
       });
     }
 

@@ -10,9 +10,9 @@ import { Vector2D, clamp, lerp, hsla } from "./math.js";
 export class Player extends Cell {
   constructor(x, y, radius = 26) {
     super(x, y, radius, {
-      hue: 182, // Bioluminescent electric cyan / turquoise
-      saturation: 95,
-      lightness: 55,
+      hue: 120, // Bioluminescent Toxic Neon Green
+      saturation: 100,
+      lightness: 54,
       drag: 0.94,
       baseMaxSpeed: 5.6
     });
@@ -110,11 +110,11 @@ export class Player extends Cell {
     if (this.dashGlowTimer > 0) {
       ctx.save();
       ctx.translate(this.pos.x, this.pos.y);
-      const auraAlpha = (this.dashGlowTimer / 14) * 0.6;
-      ctx.strokeStyle = `rgba(130, 245, 255, ${auraAlpha})`;
+      const auraAlpha = (this.dashGlowTimer / 14) * 0.7;
+      ctx.strokeStyle = `rgba(57, 255, 20, ${auraAlpha})`;
       ctx.lineWidth = 3;
       ctx.shadowBlur = 24;
-      ctx.shadowColor = "#38bdf8";
+      ctx.shadowColor = "#39ff14";
       ctx.beginPath();
       ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
       ctx.stroke();
@@ -131,7 +131,7 @@ export class Player extends Cell {
     const vertices = this.getMembraneVertices();
     const numCilia = Math.max(28, Math.min(50, Math.floor(this.radius * 1.2)));
 
-    ctx.strokeStyle = hsla(this.hue, 80, 75, 0.7);
+    ctx.strokeStyle = hsla(this.hue, 100, 75, 0.8);
     ctx.lineWidth = 1.3;
     ctx.lineCap = "round";
 

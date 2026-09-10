@@ -48,7 +48,7 @@ export class Particle {
 }
 
 export class ShockwaveRing {
-  constructor(x, y, maxRadius, color = "rgba(100, 220, 255, 0.8)", duration = 25) {
+  constructor(x, y, maxRadius, color = "rgba(57, 255, 20, 0.8)", duration = 25) {
     this.pos = new Vector2D(x, y);
     this.currentRadius = 4;
     this.maxRadius = maxRadius;
@@ -87,7 +87,7 @@ export class ShockwaveRing {
 }
 
 export class FloatingText {
-  constructor(x, y, text, color = "#a5f3fc", fontSize = 16) {
+  constructor(x, y, text, color = "#86efac", fontSize = 16) {
     this.pos = new Vector2D(x, y);
     this.text = text;
     this.color = color;

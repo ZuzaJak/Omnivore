@@ -19,20 +19,20 @@ export class AICell extends Cell {
     let hue, saturation, lightness, baseMaxSpeed;
 
     if (type === CELL_TYPES.PLANKTON) {
-      hue = randomChoice([140, 165, 80, 50]); // Neon emerald, teal, lime, or amber
-      saturation = 95;
+      hue = randomChoice([90, 105, 120, 135]); // Electric chartreuse, toxic lime, neon green, vibrant emerald
+      saturation = 100;
       lightness = 60;
       baseMaxSpeed = 2.4;
     } else if (type === CELL_TYPES.PREY) {
-      hue = randomChoice([200, 230, 270, 180]); // Sky blue, sapphire, amethyst, cyan
-      saturation = 90;
-      lightness = 55;
+      hue = randomChoice([95, 115, 128, 142]); // Radioactive lime, bright green, toxic mint, emerald
+      saturation = 95;
+      lightness = 54;
       baseMaxSpeed = 4.8;
     } else {
       // PREDATOR
-      hue = randomChoice([345, 10, 280, 30]); // Crimson red, blood orange, abyssal purple, toxic amber
+      hue = randomChoice([80, 92, 108, 145]); // Acidic yellow-green, virulent toxic green, venomous dark emerald
       saturation = 100;
-      lightness = 52;
+      lightness = 48;
       baseMaxSpeed = 4.2;
     }
 

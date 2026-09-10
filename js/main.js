@@ -1,12 +1,14 @@
 /**
  * Omnivore - Main Entry Point
  * Initializes DOM references and starts the game loop.
+ * Safely executes whether DOM is loading or already loaded.
  */
 
 import { Game } from "./game.js";
 
-window.addEventListener("DOMContentLoaded", () => {
+function init() {
   const canvas = document.getElementById("game-canvas");
+  if (!canvas) return;
 
   const uiElements = {
     startScreen: document.getElementById("start-screen"),
@@ -30,4 +32,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Start the render/update loop
   requestAnimationFrame((timestamp) => game.loop(timestamp));
-});
+}
+
+// Ensure execution even if script is injected after DOMContentLoaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}

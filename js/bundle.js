@@ -382,7 +382,7 @@ class Particle {
   }
 }
 class ShockwaveRing {
-  constructor(x, y, maxRadius, color = "rgba(100, 220, 255, 0.8)", duration = 25) {
+  constructor(x, y, maxRadius, color = "rgba(57, 255, 20, 0.8)", duration = 25) {
     this.pos = new Vector2D(x, y);
     this.currentRadius = 4;
     this.maxRadius = maxRadius;
@@ -420,7 +420,7 @@ class ShockwaveRing {
   }
 }
 class FloatingText {
-  constructor(x, y, text, color = "#a5f3fc", fontSize = 16) {
+  constructor(x, y, text, color = "#86efac", fontSize = 16) {
     this.pos = new Vector2D(x, y);
     this.text = text;
     this.color = color;
@@ -555,12 +555,12 @@ class Cell {
     this.minRadius = 10;
 
     // Biological colors & glow
-    this.hue = options.hue !== undefined ? options.hue : randomRange(170, 290);
-    this.saturation = options.saturation || 90;
-    this.lightness = options.lightness || 55;
+    this.hue = options.hue !== undefined ? options.hue : randomRange(90, 145);
+    this.saturation = options.saturation || 95;
+    this.lightness = options.lightness || 54;
     this.baseColor = hsla(this.hue, this.saturation, this.lightness, 0.85);
     this.glowColor = hsla(this.hue, 100, 65, 0.9);
-    this.coreColor = hsla((this.hue + 20) % 360, 100, 80, 0.95);
+    this.coreColor = hsla((this.hue + 15) % 360, 100, 80, 0.95);
 
     // Physics parameters (Viscous fluid mechanics)
     this.drag = options.drag || 0.94;
@@ -631,7 +631,7 @@ class Cell {
         sizeRatio: randomRange(0.12, 0.22),
         aspect: randomRange(1.4, 2.4),
         orbitSpeed: randomRange(-0.006, 0.006),
-        color: hsla((this.hue + randomRange(-35, 35) + 360) % 360, 85, 70, 0.55)
+        color: hsla((this.hue + randomRange(-15, 15) + 360) % 360, 85, 70, 0.55)
       });
     }
 
@@ -871,9 +871,9 @@ class Cell {
 class Player extends Cell {
   constructor(x, y, radius = 26) {
     super(x, y, radius, {
-      hue: 182, // Bioluminescent electric cyan / turquoise
-      saturation: 95,
-      lightness: 55,
+      hue: 120, // Bioluminescent Toxic Neon Green
+      saturation: 100,
+      lightness: 54,
       drag: 0.94,
       baseMaxSpeed: 5.6
     });
@@ -971,11 +971,11 @@ class Player extends Cell {
     if (this.dashGlowTimer > 0) {
       ctx.save();
       ctx.translate(this.pos.x, this.pos.y);
-      const auraAlpha = (this.dashGlowTimer / 14) * 0.6;
-      ctx.strokeStyle = `rgba(130, 245, 255, ${auraAlpha})`;
+      const auraAlpha = (this.dashGlowTimer / 14) * 0.7;
+      ctx.strokeStyle = `rgba(57, 255, 20, ${auraAlpha})`;
       ctx.lineWidth = 3;
       ctx.shadowBlur = 24;
-      ctx.shadowColor = "#38bdf8";
+      ctx.shadowColor = "#39ff14";
       ctx.beginPath();
       ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
       ctx.stroke();
@@ -992,7 +992,7 @@ class Player extends Cell {
     const vertices = this.getMembraneVertices();
     const numCilia = Math.max(28, Math.min(50, Math.floor(this.radius * 1.2)));
 
-    ctx.strokeStyle = hsla(this.hue, 80, 75, 0.7);
+    ctx.strokeStyle = hsla(this.hue, 100, 75, 0.8);
     ctx.lineWidth = 1.3;
     ctx.lineCap = "round";
 
@@ -1051,20 +1051,20 @@ class AICell extends Cell {
     let hue, saturation, lightness, baseMaxSpeed;
 
     if (type === CELL_TYPES.PLANKTON) {
-      hue = randomChoice([140, 165, 80, 50]); // Neon emerald, teal, lime, or amber
-      saturation = 95;
+      hue = randomChoice([90, 105, 120, 135]); // Electric chartreuse, toxic lime, neon green, vibrant emerald
+      saturation = 100;
       lightness = 60;
       baseMaxSpeed = 2.4;
     } else if (type === CELL_TYPES.PREY) {
-      hue = randomChoice([200, 230, 270, 180]); // Sky blue, sapphire, amethyst, cyan
-      saturation = 90;
-      lightness = 55;
+      hue = randomChoice([95, 115, 128, 142]); // Radioactive lime, bright green, toxic mint, emerald
+      saturation = 95;
+      lightness = 54;
       baseMaxSpeed = 4.8;
     } else {
       // PREDATOR
-      hue = randomChoice([345, 10, 280, 30]); // Crimson red, blood orange, abyssal purple, toxic amber
+      hue = randomChoice([80, 92, 108, 145]); // Acidic yellow-green, virulent toxic green, venomous dark emerald
       saturation = 100;
-      lightness = 52;
+      lightness = 48;
       baseMaxSpeed = 4.2;
     }
 
@@ -1207,7 +1207,7 @@ class BackgroundSystem {
         y: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
         radius: randomRange(minR, maxR),
         alpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(170, 240), // Cyan, deep turquoise, abyssal indigo
+        hue: randomRange(95, 145), // Toxic neon green, biohazard lime, emerald spores
         driftAngle: Math.random() * Math.PI * 2,
         driftSpeed: randomRange(0.08, 0.22),
         pulseSpeed: randomRange(0.008, 0.02),
@@ -1225,7 +1225,7 @@ class BackgroundSystem {
         y: randomRange(-this.worldRadius, this.worldRadius),
         radius: randomRange(minR, maxR),
         baseAlpha: randomRange(minAlpha, maxAlpha),
-        hue: randomRange(160, 210),
+        hue: randomRange(90, 140),
         vx: randomRange(-0.15, 0.15),
         vy: randomRange(-0.15, 0.15),
         flickerPhase: Math.random() * Math.PI * 2,
@@ -1258,9 +1258,9 @@ class BackgroundSystem {
       viewWidth / 2, viewHeight / 2, 80,
       viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.75
     );
-    bgGrad.addColorStop(0, "#051329"); // Deep abyssal cyan-tinted core
-    bgGrad.addColorStop(0.55, "#020714"); // Dark abyss indigo
-    bgGrad.addColorStop(1, "#010308"); // Void black edge
+    bgGrad.addColorStop(0, "#041c0e"); // Deep murky toxic green core
+    bgGrad.addColorStop(0.55, "#020f06"); // Dark abyss swamp green
+    bgGrad.addColorStop(1, "#010602"); // Void bio-black edge
 
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
@@ -1324,7 +1324,7 @@ class BackgroundSystem {
     const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
 
     // Subtle fluid coordinate grid points & faint lines
-    ctx.strokeStyle = "rgba(40, 110, 160, 0.08)";
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.08)";
     ctx.lineWidth = 1;
 
     ctx.beginPath();
@@ -1339,7 +1339,7 @@ class BackgroundSystem {
     ctx.stroke();
 
     // Fine glowing coordinate nodes
-    ctx.fillStyle = "rgba(70, 190, 230, 0.18)";
+    ctx.fillStyle = "rgba(57, 255, 20, 0.25)";
     for (let x = startX; x <= endX; x += this.gridSpacing) {
       for (let y = startY; y <= endY; y += this.gridSpacing) {
         ctx.beginPath();
@@ -1349,10 +1349,10 @@ class BackgroundSystem {
     }
 
     // World Boundary Membrane (Primordial bio-barrier ring)
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+    ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
     ctx.lineWidth = 6;
     ctx.shadowBlur = 28;
-    ctx.shadowColor = "#0284c7";
+    ctx.shadowColor = "#22c55e";
     ctx.beginPath();
     ctx.arc(0, 0, this.worldRadius, 0, Math.PI * 2);
     ctx.stroke();
@@ -1705,7 +1705,7 @@ class Game {
         dashResult.ejectX,
         dashResult.ejectY,
         dashResult.oppositeAngle,
-        "#38bdf8",
+        "#39ff14",
         this.player.radius
       );
 
@@ -1718,7 +1718,7 @@ class Game {
         this.player.pos.x,
         this.player.pos.y - this.player.radius - 12,
         "-Dash",
-        "#7dd3fc",
+        "#4ade80",
         13
       );
     }
@@ -1859,7 +1859,7 @@ class Game {
     // Big death impact
     this.sound.playDeath();
     this.camera.addShake(18);
-    this.particles.createEatBurst(this.player.pos.x, this.player.pos.y, "#38bdf8", 36, this.player.radius * 1.4);
+    this.particles.createEatBurst(this.player.pos.x, this.player.pos.y, "#39ff14", 36, this.player.radius * 1.4);
 
     // Show Game Over Modal
     if (this.ui.gameOverScreen) {
@@ -1958,10 +1958,12 @@ class Game {
 /**
  * Omnivore - Main Entry Point
  * Initializes DOM references and starts the game loop.
+ * Safely executes whether DOM is loading or already loaded.
  */
 
-window.addEventListener("DOMContentLoaded", () => {
+function init() {
   const canvas = document.getElementById("game-canvas");
+  if (!canvas) return;
 
   const uiElements = {
     startScreen: document.getElementById("start-screen"),
@@ -1985,7 +1987,14 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Start the render/update loop
   requestAnimationFrame((timestamp) => game.loop(timestamp));
-});
+}
+
+// Ensure execution even if script is injected after DOMContentLoaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
 
 
 })();
