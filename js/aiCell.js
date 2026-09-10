@@ -71,11 +71,12 @@ export class AICell extends Cell {
 
     let steerForce = new Vector2D(0, 0);
 
-    // 1. World boundary soft constraint
-    const distFromOrigin = this.pos.mag();
-    if (distFromOrigin > worldRadius * 0.85) {
-      const returnForce = this.pos.clone().mult(-1).normalize().mult(0.35);
-      this.applyForce(returnForce);
+    // 1. World boundary soft constraint (avoid Math.hypot when within arena)
+    const originDistSq = this.pos.magSq();
+    const boundRadius = worldRadius * 0.85;
+    if (originDistSq > boundRadius * boundRadius) {
+      const originDist = Math.sqrt(originDistSq) || 1;
+      this.applyForce(new Vector2D((-this.pos.x / originDist) * 0.35, (-this.pos.y / originDist) * 0.35));
       return;
     }
 
@@ -90,16 +91,25 @@ export class AICell extends Cell {
     // 3. Parasite: Fast, aggressive swarm tracking the player
     if (this.type === CELL_TYPES.PARASITE) {
       if (player && !player.isDead) {
-        const toPlayer = Vector2D.sub(player.pos, this.pos);
-        const distToPlayer = toPlayer.mag();
-
-        if (distToPlayer < this.sensorRadius) {
-          toPlayer.normalize();
-          // Add organic twitchy swarm jitter
-          const jitter = Vector2D.fromAngle(Math.random() * Math.PI * 2, 0.35);
-          toPlayer.add(jitter).normalize();
-          this.applyForce(toPlayer.mult(0.42));
-          return;
+        const dx = player.pos.x - this.pos.x;
+        const dy = player.pos.y - this.pos.y;
+        const reach = this.sensorRadius;
+        if (Math.abs(dx) <= reach && Math.abs(dy) <= reach) {
+          const dSq = dx * dx + dy * dy;
+          if (dSq < reach * reach) {
+            const dist = Math.sqrt(dSq) || 1;
+            const toPlayerX = dx / dist;
+            const toPlayerY = dy / dist;
+            // Add organic twitchy swarm jitter
+            const jitterAngle = Math.random() * Math.PI * 2;
+            const jitterX = Math.cos(jitterAngle) * 0.35;
+            const jitterY = Math.sin(jitterAngle) * 0.35;
+            const finalX = toPlayerX + jitterX;
+            const finalY = toPlayerY + jitterY;
+            const finalMag = Math.hypot(finalX, finalY) || 1;
+            this.applyForce(new Vector2D((finalX / finalMag) * 0.42, (finalY / finalMag) * 0.42));
+            return;
+          }
         }
       }
       // Out of range: Rapid search wander
@@ -109,22 +119,27 @@ export class AICell extends Cell {
       return;
     }
 
-    // 4. Scan for threats & food
+    // 4. Scan for threats & food using fast AABB early exit and squared distances
     let closestThreat = null;
-    let closestThreatDist = Infinity;
+    let closestThreatDistSq = Infinity;
     let closestFood = null;
-    let closestFoodDist = Infinity;
+    let closestFoodDistSq = Infinity;
 
     // Check Player
     if (player && !player.isDead) {
-      const d = this.pos.dist(player.pos);
-      if (d < this.sensorRadius + player.radius) {
-        if (player.radius > this.radius * 1.06) {
-          closestThreat = player;
-          closestThreatDist = d;
-        } else if (this.radius > player.radius * 1.06 && this.type === CELL_TYPES.PREDATOR) {
-          closestFood = player;
-          closestFoodDist = d;
+      const maxReach = this.sensorRadius + player.radius;
+      const dx = player.pos.x - this.pos.x;
+      const dy = player.pos.y - this.pos.y;
+      if (Math.abs(dx) <= maxReach && Math.abs(dy) <= maxReach) {
+        const dSq = dx * dx + dy * dy;
+        if (dSq <= maxReach * maxReach) {
+          if (player.radius > this.radius * 1.06) {
+            closestThreat = player;
+            closestThreatDistSq = dSq;
+          } else if (this.radius > player.radius * 1.06 && this.type === CELL_TYPES.PREDATOR) {
+            closestFood = player;
+            closestFoodDistSq = dSq;
+          }
         }
       }
     }
@@ -134,29 +149,36 @@ export class AICell extends Cell {
       const other = neighbors[i];
       if (other === this || other.isDead) continue;
 
-      const d = this.pos.dist(other.pos);
-      if (d > this.sensorRadius + other.radius) continue;
+      const maxReach = this.sensorRadius + other.radius;
+      const dx = other.pos.x - this.pos.x;
+      if (Math.abs(dx) > maxReach) continue;
+      const dy = other.pos.y - this.pos.y;
+      if (Math.abs(dy) > maxReach) continue;
+
+      const dSq = dx * dx + dy * dy;
+      if (dSq > maxReach * maxReach) continue;
 
       // Is other cell dangerous to us?
       if (other.radius > this.radius * 1.06) {
-        if (d < closestThreatDist) {
+        if (dSq < closestThreatDistSq) {
           closestThreat = other;
-          closestThreatDist = d;
+          closestThreatDistSq = dSq;
         }
       }
       // Is other cell edible for us?
       else if (this.radius > other.radius * 1.06 && (this.type === CELL_TYPES.PREDATOR || other.type === CELL_TYPES.PLANKTON)) {
-        if (d < closestFoodDist) {
+        if (dSq < closestFoodDistSq) {
           closestFood = other;
-          closestFoodDist = d;
+          closestFoodDistSq = dSq;
         }
       }
     }
 
-    // 4. Behavioral execution
+    // 5. Behavioral execution
     // Priority A: Flee from predators
     if (closestThreat) {
       const fleeVec = Vector2D.sub(this.pos, closestThreat.pos).normalize();
+      const closestThreatDist = Math.sqrt(closestThreatDistSq);
       const urgency = clamp(1 - (closestThreatDist / this.sensorRadius), 0.3, 1.0);
       steerForce.add(fleeVec.mult(0.36 * urgency));
     }

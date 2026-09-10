@@ -68,6 +68,7 @@ export class Game {
 
     // Input Tracking & Mobile Gestures
     this.mouseScreen = new Vector2D(canvas.width / 2, canvas.height / 2);
+    this.canvasRect = { left: 0, top: 0, width: canvas.width, height: canvas.height };
     this.isMouseDown = false;
     this.lastTapTime = 0;
     this.lastTapPos = new Vector2D(0, 0);
@@ -81,9 +82,12 @@ export class Game {
 
   bindEvents() {
     window.addEventListener("resize", () => this.resize());
+    window.addEventListener("scroll", () => {
+      this.canvasRect = this.canvas.getBoundingClientRect();
+    }, { passive: true });
 
     window.addEventListener("mousemove", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
+      const rect = this.canvasRect || this.canvas.getBoundingClientRect();
       this.mouseScreen.set(e.clientX - rect.left, e.clientY - rect.top);
     });
 
@@ -122,7 +126,7 @@ export class Game {
         this.sound.init();
 
         if (e.touches.length > 0) {
-          const rect = this.canvas.getBoundingClientRect();
+          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
           const touchX = e.touches[0].clientX - rect.left;
           const touchY = e.touches[0].clientY - rect.top;
 
@@ -160,7 +164,7 @@ export class Game {
         e.preventDefault();
 
         if (e.touches.length > 0) {
-          const rect = this.canvas.getBoundingClientRect();
+          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
           this.mouseScreen.set(
             e.touches[0].clientX - rect.left,
             e.touches[0].clientY - rect.top
@@ -211,6 +215,7 @@ export class Game {
   resize() {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
+    this.canvasRect = this.canvas.getBoundingClientRect();
     this.camera.resize(this.canvas.width, this.canvas.height);
   }
 
@@ -228,9 +233,11 @@ export class Game {
   togglePause() {
     if (this.state === GAME_STATES.PLAYING) {
       this.state = GAME_STATES.PAUSED;
+      this.sound.pause();
       if (this.ui.pauseModal) this.ui.pauseModal.classList.remove("hidden");
     } else if (this.state === GAME_STATES.PAUSED) {
       this.state = GAME_STATES.PLAYING;
+      this.sound.resume();
       if (this.ui.pauseModal) this.ui.pauseModal.classList.add("hidden");
     }
   }
@@ -418,13 +425,20 @@ export class Game {
     const pPos = this.player.pos;
     const pR = this.player.radius;
 
-    // Player vs AI
+    // Player vs AI: Fast AABB rejection + squared distance checks
     for (let i = 0; i < this.aiCells.length; i++) {
       const cell = this.aiCells[i];
       if (cell.isDead) continue;
 
-      const dist = pPos.dist(cell.pos);
       const eatDistance = (pR + cell.radius) * 0.88;
+      const dx = cell.pos.x - pPos.x;
+      if (Math.abs(dx) > eatDistance) continue;
+      const dy = cell.pos.y - pPos.y;
+      if (Math.abs(dy) > eatDistance) continue;
+
+      const distSq = dx * dx + dy * dy;
+      if (distSq > eatDistance * eatDistance) continue;
+      const dist = Math.sqrt(distSq);
 
       if (dist < eatDistance) {
         // Special Case: RED PARASITE leech attack!
@@ -504,20 +518,39 @@ export class Game {
       }
     }
 
-    // AI vs AI collisions (Only for cells reasonably near the camera to save cycles)
+    // AI vs AI collisions (Only predators can eat, and only cells near player)
     const simRadius = 1600;
+    const simRadiusSq = simRadius * simRadius;
     for (let i = 0; i < this.aiCells.length; i++) {
       const cellA = this.aiCells[i];
-      if (cellA.isDead || cellA.pos.dist(pPos) > simRadius) continue;
+      if (cellA.isDead) continue;
+
+      const pAdx = cellA.pos.x - pPos.x;
+      if (Math.abs(pAdx) > simRadius) continue;
+      const pAdy = cellA.pos.y - pPos.y;
+      if (Math.abs(pAdy) > simRadius) continue;
+      if (pAdx * pAdx + pAdy * pAdy > simRadiusSq) continue;
 
       for (let j = i + 1; j < this.aiCells.length; j++) {
         const cellB = this.aiCells[j];
-        if (cellB.isDead || cellB.pos.dist(pPos) > simRadius) continue;
+        if (cellB.isDead) continue;
 
-        const dist = cellA.pos.dist(cellB.pos);
+        // In ecological food web, only PREDATOR hunts other AI cells
+        if (cellA.type !== CELL_TYPES.PREDATOR && cellB.type !== CELL_TYPES.PREDATOR) continue;
+
+        const pBdx = cellB.pos.x - pPos.x;
+        if (Math.abs(pBdx) > simRadius) continue;
+        const pBdy = cellB.pos.y - pPos.y;
+        if (Math.abs(pBdy) > simRadius) continue;
+
         const contactDist = (cellA.radius + cellB.radius) * 0.85;
+        const abDx = cellB.pos.x - cellA.pos.x;
+        if (Math.abs(abDx) > contactDist) continue;
+        const abDy = cellB.pos.y - cellA.pos.y;
+        if (Math.abs(abDy) > contactDist) continue;
 
-        if (dist < contactDist) {
+        const abDistSq = abDx * abDx + abDy * abDy;
+        if (abDistSq < contactDist * contactDist) {
           if (cellA.radius > cellB.radius * 1.15 && cellA.type === CELL_TYPES.PREDATOR) {
             cellA.eat(cellB);
             cellB.isDead = true;
@@ -526,6 +559,7 @@ export class Game {
             cellB.eat(cellA);
             cellA.isDead = true;
             this.particles.createEatBurst(cellA.pos.x, cellA.pos.y, cellA.glowColor, 10, cellA.radius);
+            break; // cellA died, can no longer interact with remaining cells
           }
         }
       }
@@ -600,7 +634,7 @@ export class Game {
     this.background.renderWorldGrid(ctx, this.camera, w, h);
 
     // Render Particles beneath cells (shockwaves)
-    this.particles.render(ctx);
+    this.particles.render(ctx, this.camera);
 
     // Render AI Cells (Frustum Culled)
     for (let i = 0; i < this.aiCells.length; i++) {

@@ -21,6 +21,11 @@ export class BackgroundSystem {
 
     // Subtle fluid grid spacing
     this.gridSpacing = 160;
+
+    // Cached gradient for screen background
+    this.bgGrad = null;
+    this.cachedW = 0;
+    this.cachedH = 0;
   }
 
   createBokehOrbs(count, minR, maxR, minAlpha, maxAlpha) {
@@ -83,21 +88,24 @@ export class BackgroundSystem {
 
   update(dt = 1) {
     // 1. Animate far nebula bokeh
-    for (const b of this.farBokeh) {
+    for (let i = 0; i < this.farBokeh.length; i++) {
+      const b = this.farBokeh[i];
       b.x += Math.cos(b.driftAngle) * b.driftSpeed * dt;
       b.y += Math.sin(b.driftAngle) * b.driftSpeed * dt;
       b.pulsePhase += b.pulseSpeed * dt;
     }
 
     // 2. Animate mid-depth spores
-    for (const s of this.midSpores) {
+    for (let i = 0; i < this.midSpores.length; i++) {
+      const s = this.midSpores[i];
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.pulsePhase += s.pulseSpeed * dt;
     }
 
     // 3. Animate near marine snow
-    for (const s of this.nearSnow) {
+    for (let i = 0; i < this.nearSnow.length; i++) {
+      const s = this.nearSnow[i];
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.flickerPhase += s.flickerSpeed * dt;
@@ -105,30 +113,45 @@ export class BackgroundSystem {
   }
 
   render(ctx, camera, viewWidth, viewHeight) {
-    // 1. Deep abyss vignette: Alien dark murky purple / void violet
-    ctx.save();
-    const bgGrad = ctx.createRadialGradient(
-      viewWidth / 2, viewHeight / 2, 70,
-      viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
-    );
-    bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
-    bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
-    bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
+    // 1. Deep abyss vignette: Cached radial gradient
+    if (this.cachedW !== viewWidth || this.cachedH !== viewHeight || !this.bgGrad) {
+      this.cachedW = viewWidth;
+      this.cachedH = viewHeight;
+      this.bgGrad = ctx.createRadialGradient(
+        viewWidth / 2, viewHeight / 2, 70,
+        viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
+      );
+      this.bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
+      this.bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
+      this.bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
+    }
 
-    ctx.fillStyle = bgGrad;
+    ctx.fillStyle = this.bgGrad;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
-    ctx.restore();
 
-    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12)
+    // Viewport half-dimensions in world scale
+    const halfW = (viewWidth / 2) / camera.zoom;
+    const halfH = (viewHeight / 2) / camera.zoom;
+
+    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12) with frustum culling
     ctx.save();
     const farParallax = 0.12;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * farParallax, -camera.pos.y * farParallax);
 
-    for (const b of this.farBokeh) {
+    const farCamX = camera.pos.x * farParallax;
+    const farCamY = camera.pos.y * farParallax;
+
+    for (let i = 0; i < this.farBokeh.length; i++) {
+      const b = this.farBokeh[i];
       const pulse = 1 + Math.sin(b.pulsePhase) * 0.14;
       const r = b.radius * pulse;
+
+      // Frustum culling: skip off-screen orbs
+      if (Math.abs(b.x - farCamX) > halfW + r || Math.abs(b.y - farCamY) > halfH + r) {
+        continue;
+      }
 
       const bokehGrad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
       bokehGrad.addColorStop(0, hsla(b.hue, 90, 65, b.alpha * 1.5));
@@ -142,16 +165,25 @@ export class BackgroundSystem {
     }
     ctx.restore();
 
-    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35)
+    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35) with frustum culling
     ctx.save();
     const midParallax = 0.35;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * midParallax, -camera.pos.y * midParallax);
 
-    for (const s of this.midSpores) {
+    const midCamX = camera.pos.x * midParallax;
+    const midCamY = camera.pos.y * midParallax;
+
+    for (let i = 0; i < this.midSpores.length; i++) {
+      const s = this.midSpores[i];
       const pulse = 1 + Math.sin(s.pulsePhase) * 0.2;
       const r = s.radius * pulse;
+
+      // Frustum culling: skip off-screen spores
+      if (Math.abs(s.x - midCamX) > halfW + r || Math.abs(s.y - midCamY) > halfH + r) {
+        continue;
+      }
 
       const sporeGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
       sporeGrad.addColorStop(0, hsla(s.hue, 95, 70, s.alpha * 1.3));
@@ -165,14 +197,21 @@ export class BackgroundSystem {
     }
     ctx.restore();
 
-    // 4. Layer 3: Near-Depth Marine Snow & Plankton Dust (Parallax factor ~0.60)
+    // 4. Layer 3: Near-Depth Marine Snow (Parallax factor ~0.60) with frustum culling
     ctx.save();
     const nearParallax = 0.60;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * nearParallax, -camera.pos.y * nearParallax);
 
-    for (const s of this.nearSnow) {
+    const nearCamX = camera.pos.x * nearParallax;
+    const nearCamY = camera.pos.y * nearParallax;
+
+    for (let i = 0; i < this.nearSnow.length; i++) {
+      const s = this.nearSnow[i];
+      if (Math.abs(s.x - nearCamX) > halfW + s.radius || Math.abs(s.y - nearCamY) > halfH + s.radius) {
+        continue;
+      }
       const alpha = s.baseAlpha * (0.8 + Math.sin(s.flickerPhase) * 0.25);
       ctx.fillStyle = hsla(s.hue, 95, 75, alpha);
       ctx.beginPath();
@@ -198,77 +237,86 @@ export class BackgroundSystem {
     const startY = Math.floor(top / this.gridSpacing) * this.gridSpacing;
     const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
 
-    // Time-based liquid membrane undulation (sine waves simulate underwater optical refraction)
+    // Time-based liquid membrane undulation
     const time = performance.now() * 0.0012;
-    const step = 32; // Segment density for smooth liquid curves
+    const step = 40; // Optimized segment density
 
     ctx.strokeStyle = "rgba(168, 85, 247, 0.12)"; // Ethereal alien violet grid
     ctx.lineWidth = 1.2;
 
-    // Vertical liquid undulating grid lines
+    // Batch all vertical and horizontal grid lines in a single stroke call
+    ctx.beginPath();
     for (let x = startX; x <= endX; x += this.gridSpacing) {
-      ctx.beginPath();
+      let first = true;
       for (let y = top - step; y <= bottom + step; y += step) {
         const waveX = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
                         + Math.cos(y * 0.016 - time * 0.8) * 3;
-        if (y <= top - step) {
+        if (first) {
           ctx.moveTo(waveX, y);
+          first = false;
         } else {
           ctx.lineTo(waveX, y);
         }
       }
-      ctx.stroke();
     }
 
-    // Horizontal liquid undulating grid lines
     for (let y = startY; y <= endY; y += this.gridSpacing) {
-      ctx.beginPath();
+      let first = true;
       for (let x = left - step; x <= right + step; x += step) {
         const waveY = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
                         + Math.cos(x * 0.016 - time * 0.8) * 3;
-        if (x <= left - step) {
+        if (first) {
           ctx.moveTo(x, waveY);
+          first = false;
         } else {
           ctx.lineTo(x, waveY);
         }
       }
-      ctx.stroke();
     }
+    ctx.stroke();
 
-    // Fine glowing coordinate nodes sitting on wave intersections
+    // Batch all coordinate nodes into a single fill call
     ctx.fillStyle = "rgba(57, 255, 20, 0.35)"; // Toxic green nodes
+    ctx.beginPath();
     for (let x = startX; x <= endX; x += this.gridSpacing) {
       for (let y = startY; y <= endY; y += this.gridSpacing) {
         const nx = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
                      + Math.cos(y * 0.016 - time * 0.8) * 3;
         const ny = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
                      + Math.cos(x * 0.016 - time * 0.8) * 3;
-        ctx.beginPath();
+        ctx.moveTo(nx + 1.8, ny);
         ctx.arc(nx, ny, 1.8, 0, Math.PI * 2);
-        ctx.fill();
       }
     }
+    ctx.fill();
 
-    // World Boundary Membrane (Pulsing dual violet-green bio-barrier)
-    const barrierPulse = Math.sin(time * 2) * 3;
+    // World Boundary Membrane: Frustum check (only draw if near or touching viewport)
+    const viewDiag = Math.hypot(halfW, halfH);
+    const camDist = Math.hypot(camera.pos.x, camera.pos.y);
+    const boundaryRadius = this.worldRadius;
 
-    // Inner glowing toxic green ring
-    ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
-    ctx.lineWidth = 5;
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = "#39ff14";
-    ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
-    ctx.stroke();
+    if (camDist + viewDiag >= boundaryRadius - 60 && camDist - viewDiag <= boundaryRadius + 60) {
+      const barrierPulse = Math.sin(time * 2) * 3;
 
-    // Outer glowing alien purple ring
-    ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
-    ctx.lineWidth = 3;
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = "#a855f7";
-    ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
-    ctx.stroke();
+      // Inner glowing toxic green ring
+      ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
+      ctx.lineWidth = 4;
+      ctx.shadowBlur = 12; // Streamlined from 25 to 12
+      ctx.shadowColor = "#39ff14";
+      ctx.beginPath();
+      ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Outer glowing alien purple ring
+      ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
+      ctx.lineWidth = 2.5;
+      ctx.shadowBlur = 10; // Streamlined from 20 to 10
+      ctx.shadowColor = "#a855f7";
+      ctx.beginPath();
+      ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
   }

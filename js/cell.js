@@ -165,20 +165,55 @@ export class Cell {
     this.stretchFactor = lerp(this.stretchFactor, targetStretch, 0.1);
   }
 
+  buildMembranePath(ctx) {
+    const num = this.numVertices;
+    const vX = Cell.vX;
+    const vY = Cell.vY;
+    const effectiveRadius = this.radius * (1 + this.elasticBounce);
+    const heading = this.vel.magSq() > 0.01 ? this.vel.heading() : 0;
+    const stretchDelta = this.stretchFactor - 1;
+    const squishDelta = this.squishFactor - 1;
+
+    for (let i = 0; i < num; i++) {
+      const angle = (i / num) * (Math.PI * 2);
+      const wave1 = Math.sin(angle * this.waveFreq1 + this.membranePhase) * this.waveAmp1;
+      const wave2 = Math.cos(angle * this.waveFreq2 - this.membranePhase * 1.3) * this.waveAmp2;
+      const breathing = Math.sin(this.membranePhase * 0.8) * 0.02;
+      const relAngle = angle - heading;
+      const velocitySquash = (Math.cos(relAngle) * stretchDelta) +
+                             (Math.abs(Math.sin(relAngle)) * squishDelta);
+
+      const r = effectiveRadius * (1 + wave1 + wave2 + breathing + velocitySquash);
+      vX[i] = Math.cos(angle) * r;
+      vY[i] = Math.sin(angle) * r;
+    }
+
+    ctx.beginPath();
+    const firstMidX = (vX[0] + vX[1]) * 0.5;
+    const firstMidY = (vY[0] + vY[1]) * 0.5;
+    ctx.moveTo(firstMidX, firstMidY);
+
+    for (let i = 1; i < num; i++) {
+      const nextIdx = (i + 1) % num;
+      const midX = (vX[i] + vX[nextIdx]) * 0.5;
+      const midY = (vY[i] + vY[nextIdx]) * 0.5;
+      ctx.quadraticCurveTo(vX[i], vY[i], midX, midY);
+    }
+    ctx.quadraticCurveTo(vX[0], vY[0], firstMidX, firstMidY);
+    ctx.closePath();
+  }
+
   getMembraneVertices() {
+    // Retained for backward-compatibility
     const vertices = [];
     const effectiveRadius = this.radius * (1 + this.elasticBounce);
     const heading = this.vel.magSq() > 0.01 ? this.vel.heading() : 0;
 
     for (let i = 0; i < this.numVertices; i++) {
       const angle = (i / this.numVertices) * Math.PI * 2;
-
-      // Multi-frequency biological wave undulation
       const wave1 = Math.sin(angle * this.waveFreq1 + this.membranePhase) * this.waveAmp1;
       const wave2 = Math.cos(angle * this.waveFreq2 - this.membranePhase * 1.3) * this.waveAmp2;
       const breathing = Math.sin(this.membranePhase * 0.8) * 0.02;
-
-      // Velocity alignment: Stretch along movement heading, compress perpendicular
       const relAngle = angle - heading;
       const velocitySquash = (Math.cos(relAngle) * (this.stretchFactor - 1)) +
                              (Math.abs(Math.sin(relAngle)) * (this.squishFactor - 1));
@@ -191,7 +226,6 @@ export class Cell {
         r: r
       });
     }
-
     return vertices;
   }
 
@@ -199,37 +233,20 @@ export class Cell {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
 
-    const vertices = this.getMembraneVertices();
-    if (vertices.length < 3) {
-      ctx.restore();
-      return;
-    }
-
-    // 1. Bioluminescent Glow Halo
+    // 1. Bioluminescent Glow Halo (Optimized: disabled for tiny plankton, capped for others)
     const isFlashing = this.flashTimer > 0;
-    const glowBlur = isFlashing ? 32 : Math.min(26, Math.max(12, this.radius * 0.45));
-    ctx.shadowBlur = glowBlur;
-    ctx.shadowColor = isFlashing ? (this.flashColor || "#ffffff") : this.glowColor;
-
-    // 2. Build Organic Spline Membrane Path
-    ctx.beginPath();
-    const firstMid = {
-      x: (vertices[0].x + vertices[1].x) / 2,
-      y: (vertices[0].y + vertices[1].y) / 2
-    };
-    ctx.moveTo(firstMid.x, firstMid.y);
-
-    for (let i = 1; i < vertices.length; i++) {
-      const next = vertices[(i + 1) % vertices.length];
-      const mid = {
-        x: (vertices[i].x + next.x) / 2,
-        y: (vertices[i].y + next.y) / 2
-      };
-      ctx.quadraticCurveTo(vertices[i].x, vertices[i].y, mid.x, mid.y);
+    if (isFlashing) {
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = this.flashColor || "#ffffff";
+    } else if (this.radius >= 18) {
+      ctx.shadowBlur = Math.min(14, this.radius * 0.35);
+      ctx.shadowColor = this.glowColor;
+    } else {
+      ctx.shadowBlur = 0;
     }
-    // Connect back to the first midpoint
-    ctx.quadraticCurveTo(vertices[0].x, vertices[0].y, firstMid.x, firstMid.y);
-    ctx.closePath();
+
+    // 2. Build Organic Spline Membrane Path (zero object allocations)
+    this.buildMembranePath(ctx);
 
     // 3. Translucent Cytoplasm Shading with Multi-Stop Radial Gradient
     const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 1.1);
@@ -257,6 +274,7 @@ export class Cell {
     ctx.lineWidth = Math.max(1.8, Math.min(4.5, this.radius * 0.08));
     ctx.strokeStyle = isFlashing ? (this.flashColor || "#ffffff") : hsla(this.hue, 100, 75, 0.9);
     ctx.stroke();
+    ctx.shadowBlur = 0; // Clear blur immediately to protect subsequent draws
 
     // 5. Internal Organelles (Nucleus & floating structures)
     this.renderOrganelles(ctx);
@@ -265,11 +283,20 @@ export class Cell {
   }
 
   renderOrganelles(ctx) {
+    // LOD: Plankton (radius < 16) only need a simple, fast nucleus dot
+    if (this.radius < 16) {
+      ctx.fillStyle = hsla((this.hue + 25) % 360, 95, 80, 0.7);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
     ctx.save();
-    ctx.shadowBlur = 0;
     ctx.rotate(this.organelleAngle);
 
-    for (const org of this.organelles) {
+    for (let i = 0; i < this.organelles.length; i++) {
+      const org = this.organelles[i];
       const dist = this.radius * org.distRatio;
       const x = Math.cos(org.angleOffset) * dist;
       const y = Math.sin(org.angleOffset) * dist;
@@ -278,11 +305,9 @@ export class Cell {
         const nRadius = this.radius * org.radiusRatio;
 
         // Nucleus outer aura
-        ctx.save();
-        ctx.translate(x, y);
         ctx.fillStyle = hsla((this.hue + 15) % 360, 90, 65, 0.4);
         ctx.beginPath();
-        ctx.arc(0, 0, nRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, nRadius, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = hsla((this.hue + 30) % 360, 100, 80, 0.75);
@@ -292,47 +317,39 @@ export class Cell {
         // Dense Nucleolus center
         ctx.fillStyle = hsla((this.hue + 45) % 360, 100, 90, 0.85);
         ctx.beginPath();
-        ctx.arc(0, 0, nRadius * 0.45, 0, Math.PI * 2);
+        ctx.arc(x, y, nRadius * 0.45, 0, Math.PI * 2);
         ctx.fill();
 
         // Chromatin spots
-        for (const node of org.chromatinNodes) {
-          const nx = Math.cos(node.angle) * (nRadius * node.dist);
-          const ny = Math.sin(node.angle) * (nRadius * node.dist);
+        const nodes = org.chromatinNodes;
+        for (let j = 0; j < nodes.length; j++) {
+          const node = nodes[j];
+          const nx = x + Math.cos(node.angle) * (nRadius * node.dist);
+          const ny = y + Math.sin(node.angle) * (nRadius * node.dist);
           ctx.fillStyle = hsla(this.hue, 100, 95, 0.7);
           ctx.beginPath();
           ctx.arc(nx, ny, nRadius * node.r, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.restore();
       } else if (org.type === "mitochondria") {
         const mSize = this.radius * org.sizeRatio;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(org.angleOffset * 1.5);
         ctx.fillStyle = org.color;
         ctx.beginPath();
-        ctx.ellipse(0, 0, mSize * org.aspect, mSize, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, mSize * org.aspect, mSize, org.angleOffset * 1.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
       } else if (org.type === "vacuole") {
         const vRadius = this.radius * org.sizeRatio;
-        ctx.save();
-        ctx.translate(x, y);
         ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
         ctx.beginPath();
-        ctx.arc(0, 0, vRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, vRadius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
       }
     }
 
     ctx.restore();
   }
 }
+
+// Pre-allocated static arrays for zero-garbage membrane generation
+Cell.vX = new Float32Array(64);
+Cell.vY = new Float32Array(64);

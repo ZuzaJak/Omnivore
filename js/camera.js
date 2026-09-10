@@ -22,6 +22,10 @@ export class Camera {
     this.shakeIntensity = 0;
     this.shakeDecay = 0.9;
     this.shakeOffset = new Vector2D(0, 0);
+
+    // Reusable vectors to eliminate GC allocation in hot update loops
+    this._scratchWorld = new Vector2D(0, 0);
+    this._scratchScreen = new Vector2D(0, 0);
   }
 
   resize(width, height) {
@@ -74,7 +78,7 @@ export class Camera {
     const worldX = centeredX / this.zoom + this.pos.x;
     const worldY = centeredY / this.zoom + this.pos.y;
 
-    return new Vector2D(worldX, worldY);
+    return this._scratchWorld.set(worldX, worldY);
   }
 
   worldToScreen(worldX, worldY) {
@@ -84,7 +88,7 @@ export class Camera {
     const screenX = centeredX + (this.viewportWidth / 2 + this.shakeOffset.x);
     const screenY = centeredY + (this.viewportHeight / 2 + this.shakeOffset.y);
 
-    return new Vector2D(screenX, screenY);
+    return this._scratchScreen.set(screenX, screenY);
   }
 
   isVisible(worldX, worldY, radius = 50) {

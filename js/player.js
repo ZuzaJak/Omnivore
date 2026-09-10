@@ -137,11 +137,12 @@ export class Player extends Cell {
       const auraAlpha = (this.dashGlowTimer / 14) * 0.7;
       ctx.strokeStyle = `rgba(57, 255, 20, ${auraAlpha})`;
       ctx.lineWidth = 3;
-      ctx.shadowBlur = 24;
+      ctx.shadowBlur = 14; // Streamlined from 24 to 14
       ctx.shadowColor = "#39ff14";
       ctx.beginPath();
       ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
   }
@@ -152,13 +153,14 @@ export class Player extends Cell {
 
     const speed = this.vel.mag();
     const moveHeading = speed > 0.1 ? this.vel.heading() : 0;
-    const vertices = this.getMembraneVertices();
-    const numCilia = Math.max(28, Math.min(50, Math.floor(this.radius * 1.2)));
+    const numCilia = Math.max(24, Math.min(44, Math.floor(this.radius * 1.1)));
 
     ctx.strokeStyle = hsla(this.hue, 100, 75, 0.8);
     ctx.lineWidth = 1.3;
     ctx.lineCap = "round";
 
+    // Batch all cilia paths in a single draw call (reduces 40+ draw calls to 1)
+    ctx.beginPath();
     for (let i = 0; i < numCilia; i++) {
       const angle = (i / numCilia) * Math.PI * 2;
 
@@ -186,11 +188,10 @@ export class Player extends Cell {
       const ctrlX = baseX + Math.cos(ctrlAngle) * (ciliumLength * 0.5);
       const ctrlY = baseY + Math.sin(ctrlAngle) * (ciliumLength * 0.5);
 
-      ctx.beginPath();
       ctx.moveTo(baseX, baseY);
       ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     ctx.restore();
   }

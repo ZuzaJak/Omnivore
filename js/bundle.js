@@ -128,11 +128,21 @@ function hsla(h, s, l, a = 1) {
 
 /* === js/audio.js === */
 /**
- * Omnivore - Procedural Biological Audio Engine
- * Zero external audio assets required.
- * Generates an organic, breathing primordial abyss soundscape:
- * viscous fluid currents, rhythmic protoplasmic pulses, ambient micro-bubbles,
- * wet membrane ruptures, and parasitic osmotic suction squelches.
+ * Omnivore - Action-Driven Natural Audio Engine
+ * Purely procedural sound effects via HTML5 Web Audio API.
+ * 
+ * Design Principles:
+ * - Zero Background Music: Total silence during idle navigation. No continuous loops,
+ *   no streaming audio, and no background drones.
+ * - Nature & Liquid Sound Effects Only: Short, crisp, organic procedural audio cues
+ *   triggered strictly on specific player actions:
+ *   - Soft water splashes / hydrodynamic pushes (Dash)
+ *   - Liquid consumption drops / pops (Eat)
+ *   - Gentle fluid friction / membrane bounce (Bounce)
+ *   - Subtle organic ripples (Parasite interaction)
+ *   - Gentle, brief cellular dissolution (Game Over)
+ * - Ultra-Clean & Lightweight: Zero ongoing CPU usage or memory leaks; all Web Audio
+ *   nodes are transient and terminate cleanly immediately after playback.
  */
 class SoundSystem {
   constructor() {
@@ -140,20 +150,7 @@ class SoundSystem {
     this.masterGain = null;
     this.isMuted = false;
     this.isInitialized = false;
-
-    // Ambient soundscape nodes
-    this.ambientGain = null;
-    this.ambientOsc1 = null;
-    this.ambientOsc2 = null;
-    this.ambientFilter = null;
-    this.lfo = null;
-    this.lfoGain = null;
-    this.fluidNoiseSource = null;
-    this.fluidNoiseFilter = null;
-    this.fluidNoiseGain = null;
-
-    // Ambient micro-bubbles timer
-    this.bubbleTimer = null;
+    this.isPaused = false;
   }
 
   init() {
@@ -161,23 +158,29 @@ class SoundSystem {
 
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      this.ctx = new AudioCtx();
-
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.75, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
-
-      this.startAbyssAmbience();
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.setValueAtTime(0.75, this.ctx.currentTime);
+        this.masterGain.connect(this.ctx.destination);
+      }
       this.isInitialized = true;
     } catch (e) {
-      console.warn("AudioContext could not be initialized:", e);
+      console.warn("Omnivore: AudioContext could not be initialized:", e);
     }
   }
 
   resume() {
+    this.isPaused = false;
     if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  pause() {
+    this.isPaused = true;
+    if (this.ctx && this.ctx.state === "running") {
+      this.ctx.suspend().catch(() => {});
     }
   }
 
@@ -191,332 +194,200 @@ class SoundSystem {
   }
 
   /**
-   * Generates a 4-second pink noise buffer simulating thick viscous fluid rushing
-   */
-  createFluidNoiseBuffer() {
-    const sampleRate = this.ctx.sampleRate;
-    const length = sampleRate * 4;
-    const buffer = this.ctx.createBuffer(1, length, sampleRate);
-    const data = buffer.getChannelData(0);
-
-    // Filtered pink noise algorithm
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-    for (let i = 0; i < length; i++) {
-      const white = Math.random() * 2 - 1;
-      b0 = 0.99886 * b0 + white * 0.0555179;
-      b1 = 0.99332 * b1 + white * 0.0750759;
-      b2 = 0.96900 * b2 + white * 0.1538520;
-      b3 = 0.86650 * b3 + white * 0.3104856;
-      b4 = 0.55000 * b4 + white * 0.5329522;
-      b5 = -0.7616 * b5 - white * 0.0168980;
-      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.14;
-      b6 = white * 0.115926;
-    }
-    return buffer;
-  }
-
-  /**
-   * Initializes the living biological abyss drone:
-   * 1. Viscous fluid friction currents (filtered looping pink noise)
-   * 2. Rhythmic protoplasmic breathing sub-drone (~0.07Hz LFO cycle)
-   * 3. Ambient micro-bubbles popping sporadically in the primordial soup
-   */
-  startAbyssAmbience() {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-
-    // Master ambient bus
-    this.ambientGain = this.ctx.createGain();
-    this.ambientGain.gain.setValueAtTime(0.24, t);
-    this.ambientGain.connect(this.masterGain);
-
-    // --- 1. Viscous Fluid Current (Pink Noise Stream) ---
-    try {
-      const noiseBuffer = this.createFluidNoiseBuffer();
-      this.fluidNoiseSource = this.ctx.createBufferSource();
-      this.fluidNoiseSource.buffer = noiseBuffer;
-      this.fluidNoiseSource.loop = true;
-
-      this.fluidNoiseFilter = this.ctx.createBiquadFilter();
-      this.fluidNoiseFilter.type = "lowpass";
-      this.fluidNoiseFilter.frequency.setValueAtTime(160, t);
-      this.fluidNoiseFilter.Q.setValueAtTime(2.0, t);
-
-      this.fluidNoiseGain = this.ctx.createGain();
-      this.fluidNoiseGain.gain.setValueAtTime(0.35, t);
-
-      this.fluidNoiseSource.connect(this.fluidNoiseFilter);
-      this.fluidNoiseFilter.connect(this.fluidNoiseGain);
-      this.fluidNoiseGain.connect(this.ambientGain);
-      this.fluidNoiseSource.start(t);
-    } catch (e) {
-      console.warn("Fluid noise buffer init failed:", e);
-    }
-
-    // --- 2. Living Cellular Drone & Protoplasmic Pulse ---
-    this.ambientFilter = this.ctx.createBiquadFilter();
-    this.ambientFilter.type = "lowpass";
-    this.ambientFilter.frequency.setValueAtTime(110, t);
-    this.ambientFilter.Q.setValueAtTime(3.2, t);
-
-    // Warm sub-bass oscillators detuned to create ~0.7Hz organic acoustic beating
-    this.ambientOsc1 = this.ctx.createOscillator();
-    this.ambientOsc1.type = "sine";
-    this.ambientOsc1.frequency.setValueAtTime(43.5, t); // Deep F1
-
-    this.ambientOsc2 = this.ctx.createOscillator();
-    this.ambientOsc2.type = "triangle";
-    this.ambientOsc2.frequency.setValueAtTime(65.2, t); // C2
-
-    // Slow LFO for organic tissue inhalation/exhalation cycle (~14s)
-    this.lfo = this.ctx.createOscillator();
-    this.lfo.frequency.setValueAtTime(0.07, t);
-    this.lfoGain = this.ctx.createGain();
-    this.lfoGain.gain.setValueAtTime(45, t);
-    this.lfo.connect(this.lfoGain);
-    this.lfoGain.connect(this.ambientFilter.frequency);
-    if (this.fluidNoiseFilter) {
-      this.lfoGain.connect(this.fluidNoiseFilter.frequency);
-    }
-
-    const oscSubGain = this.ctx.createGain();
-    oscSubGain.gain.setValueAtTime(0.65, t);
-
-    this.ambientOsc1.connect(this.ambientFilter);
-    this.ambientOsc2.connect(this.ambientFilter);
-    this.ambientFilter.connect(oscSubGain);
-    oscSubGain.connect(this.ambientGain);
-
-    this.ambientOsc1.start(t);
-    this.ambientOsc2.start(t);
-    this.lfo.start(t);
-
-    // --- 3. Ambient Microscopic Bubbles ---
-    this.scheduleNextBubble();
-  }
-
-  /**
-   * Spawns faint, sporadic fluid micro-bubbles in the background
-   */
-  scheduleNextBubble() {
-    if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
-
-    // Random interval between 1.8s and 4.2s
-    const delayMs = 1800 + Math.random() * 2400;
-    this.bubbleTimer = setTimeout(() => {
-      this.playAmbientBubble();
-      this.scheduleNextBubble();
-    }, delayMs);
-  }
-
-  playAmbientBubble() {
-    if (!this.ctx || this.isMuted || this.ctx.state !== "running") return;
-
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-
-    // Gentle bubble frequency chirp (upward slide typical of liquid bubbles)
-    const baseFreq = 260 + Math.random() * 420;
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(baseFreq, t);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.55, t + 0.045);
-
-    filter.type = "bandpass";
-    filter.frequency.setValueAtTime(baseFreq * 1.2, t);
-    filter.Q.setValueAtTime(4.5, t);
-
-    // Soft, delicate volume
-    const bubbleVolume = 0.035 + Math.random() * 0.04;
-    gain.gain.setValueAtTime(0.001, t);
-    gain.gain.linearRampToValueAtTime(bubbleVolume, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(t);
-    osc.stop(t + 0.075);
-  }
-
-  /**
-   * Wet, organic consumption pop & viscous fluid assimilation gulp
-   * Scale pitch inversely to size: tiny plankton = crisp high pop, giant prey = deep gelatinous gulp
+   * Action: Organic Swallowing / Liquid Gulping & Glugging Sound
+   * Synthesizes a natural, wet, visceral swallow / gulp when absorbing a cell:
+   * 1. Wet liquid suction chirp (intake slurp)
+   * 2. Resonant throat cavity "glug" (downward formant scoop)
+   * 3. Wet fluid friction slosh (viscous membrane friction)
+   * 4. Deep sub-throat displacement thump & settling closing bubble
+   * Total silence immediately following the ~220ms decay.
    */
   playEat(pitch = 1) {
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx || this.isMuted || this.isPaused) return;
     this.resume();
 
     const t = this.ctx.currentTime;
+    const p = Math.max(0.45, Math.min(2.2, pitch));
 
-    // Component 1: Wet membrane rupture click/snap
-    const snapOsc = this.ctx.createOscillator();
-    const snapGain = this.ctx.createGain();
-    const snapFilter = this.ctx.createBiquadFilter();
+    // --- Layer 1: Wet Liquid Suction Slurp (Transient intake) ---
+    const slurpOsc = this.ctx.createOscillator();
+    const slurpGain = this.ctx.createGain();
 
-    snapOsc.type = "sine";
-    const startSnapFreq = Math.min(1800, 680 * pitch);
-    const endSnapFreq = Math.max(90, 180 * pitch);
-    snapOsc.frequency.setValueAtTime(startSnapFreq, t);
-    snapOsc.frequency.exponentialRampToValueAtTime(endSnapFreq, t + 0.04);
+    slurpOsc.type = "sine";
+    const slurpStart = Math.min(1400, 680 * p);
+    const slurpEnd = Math.max(80, 240 * p);
+    slurpOsc.frequency.setValueAtTime(slurpStart, t);
+    slurpOsc.frequency.exponentialRampToValueAtTime(slurpEnd, t + 0.038);
 
-    snapFilter.type = "bandpass";
-    snapFilter.frequency.setValueAtTime(startSnapFreq * 0.9, t);
-    snapFilter.Q.setValueAtTime(2.5, t);
+    slurpGain.gain.setValueAtTime(0.001, t);
+    slurpGain.gain.linearRampToValueAtTime(0.30, t + 0.006);
+    slurpGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
 
-    snapGain.gain.setValueAtTime(0.38, t);
-    snapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    slurpOsc.connect(slurpGain);
+    slurpGain.connect(this.masterGain);
+    slurpOsc.start(t);
+    slurpOsc.stop(t + 0.05);
 
-    snapOsc.connect(snapFilter);
-    snapFilter.connect(snapGain);
-    snapGain.connect(this.masterGain);
-    snapOsc.start(t);
-    snapOsc.stop(t + 0.055);
-
-    // Component 2: Viscous fluid suction / gulp body
+    // --- Layer 2: Resonant Fluid Cavity "Glug" (Deep swallowing body) ---
     const gulpOsc = this.ctx.createOscillator();
     const gulpGain = this.ctx.createGain();
     const gulpFilter = this.ctx.createBiquadFilter();
 
     gulpOsc.type = "triangle";
-    const gulpBaseFreq = Math.max(70, 220 * pitch);
-    gulpOsc.frequency.setValueAtTime(gulpBaseFreq, t + 0.01);
-    gulpOsc.frequency.exponentialRampToValueAtTime(gulpBaseFreq * 0.45, t + 0.16);
+    const gulpStart = Math.min(600, 260 * p);
+    const gulpMid = Math.max(65, 130 * p);
+    const gulpEnd = Math.max(40, 75 * p);
+
+    gulpOsc.frequency.setValueAtTime(gulpStart, t + 0.01);
+    gulpOsc.frequency.exponentialRampToValueAtTime(gulpMid, t + 0.08);
+    gulpOsc.frequency.exponentialRampToValueAtTime(gulpEnd, t + 0.19);
 
     gulpFilter.type = "lowpass";
-    gulpFilter.frequency.setValueAtTime(Math.min(900, 480 * pitch), t);
-    gulpFilter.Q.setValueAtTime(3.0, t);
+    gulpFilter.frequency.setValueAtTime(Math.min(1100, 480 * p), t + 0.01);
+    gulpFilter.frequency.exponentialRampToValueAtTime(Math.max(100, 160 * p), t + 0.18);
+    gulpFilter.Q.setValueAtTime(3.6, t);
 
-    gulpGain.gain.setValueAtTime(0.001, t);
-    gulpGain.gain.linearRampToValueAtTime(0.32, t + 0.02);
-    gulpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    gulpGain.gain.setValueAtTime(0.001, t + 0.01);
+    gulpGain.gain.linearRampToValueAtTime(0.48, t + 0.035);
+    gulpGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.20);
 
     gulpOsc.connect(gulpFilter);
     gulpFilter.connect(gulpGain);
     gulpGain.connect(this.masterGain);
     gulpOsc.start(t + 0.01);
-    gulpOsc.stop(t + 0.19);
+    gulpOsc.stop(t + 0.21);
+
+    // --- Layer 3: Wet Fluid Friction / Slosh (Cellular membrane intake) ---
+    const noiseLen = Math.floor(this.ctx.sampleRate * 0.08);
+    const noiseBuffer = this.ctx.createBuffer(1, noiseLen, this.ctx.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) {
+      noiseData[i] = Math.random() * 2 - 1;
+    }
+
+    const sloshNoise = this.ctx.createBufferSource();
+    sloshNoise.buffer = noiseBuffer;
+
+    const sloshFilter = this.ctx.createBiquadFilter();
+    sloshFilter.type = "bandpass";
+    sloshFilter.frequency.setValueAtTime(Math.min(1800, 740 * p), t + 0.01);
+    sloshFilter.frequency.exponentialRampToValueAtTime(Math.max(120, 260 * p), t + 0.075);
+    sloshFilter.Q.setValueAtTime(2.8, t);
+
+    const sloshGain = this.ctx.createGain();
+    sloshGain.gain.setValueAtTime(0.001, t + 0.01);
+    sloshGain.gain.linearRampToValueAtTime(0.20, t + 0.022);
+    sloshGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+
+    sloshNoise.connect(sloshFilter);
+    sloshFilter.connect(sloshGain);
+    sloshGain.connect(this.masterGain);
+    sloshNoise.start(t + 0.01);
+    sloshNoise.stop(t + 0.085);
+
+    // --- Layer 4: Deep Sub-Throat Displacement Thump ---
+    const thumpOsc = this.ctx.createOscillator();
+    const thumpGain = this.ctx.createGain();
+
+    thumpOsc.type = "sine";
+    const thumpStart = Math.min(220, 115 * p);
+    const thumpEnd = Math.max(32, 48 * p);
+    thumpOsc.frequency.setValueAtTime(thumpStart, t + 0.03);
+    thumpOsc.frequency.exponentialRampToValueAtTime(thumpEnd, t + 0.21);
+
+    thumpGain.gain.setValueAtTime(0.001, t + 0.03);
+    thumpGain.gain.linearRampToValueAtTime(0.40, t + 0.06);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+
+    thumpOsc.connect(thumpGain);
+    thumpGain.connect(this.masterGain);
+    thumpOsc.start(t + 0.03);
+    thumpOsc.stop(t + 0.23);
+
+    // --- Layer 5: Settling Fluid Gloop Bubble (Crisp swallow release) ---
+    const bubbleOsc = this.ctx.createOscillator();
+    const bubbleGain = this.ctx.createGain();
+
+    bubbleOsc.type = "sine";
+    const bStart = Math.min(450, 160 * p);
+    const bEnd = Math.min(800, 270 * p);
+    bubbleOsc.frequency.setValueAtTime(bStart, t + 0.07);
+    bubbleOsc.frequency.exponentialRampToValueAtTime(bEnd, t + 0.12);
+
+    bubbleGain.gain.setValueAtTime(0.001, t + 0.07);
+    bubbleGain.gain.linearRampToValueAtTime(0.18, t + 0.085);
+    bubbleGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.135);
+
+    bubbleOsc.connect(bubbleGain);
+    bubbleGain.connect(this.masterGain);
+    bubbleOsc.start(t + 0.07);
+    bubbleOsc.stop(t + 0.14);
   }
 
   /**
-   * Parasite leech attack: Viscous predatory squelch, acidic osmotic suction
-   */
-  playLeech() {
-    if (!this.ctx || this.isMuted) return;
-    this.resume();
-
-    const t = this.ctx.currentTime;
-
-    // Component 1: Wet flesh pinch / puncture chirp
-    const pinchOsc = this.ctx.createOscillator();
-    const pinchGain = this.ctx.createGain();
-    pinchOsc.type = "sawtooth";
-    pinchOsc.frequency.setValueAtTime(540, t);
-    pinchOsc.frequency.exponentialRampToValueAtTime(160, t + 0.12);
-
-    const pinchFilter = this.ctx.createBiquadFilter();
-    pinchFilter.type = "bandpass";
-    pinchFilter.frequency.setValueAtTime(750, t);
-    pinchFilter.Q.setValueAtTime(4.0, t);
-
-    pinchGain.gain.setValueAtTime(0.42, t);
-    pinchGain.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
-
-    pinchOsc.connect(pinchFilter);
-    pinchFilter.connect(pinchGain);
-    pinchGain.connect(this.masterGain);
-    pinchOsc.start(t);
-    pinchOsc.stop(t + 0.14);
-
-    // Component 2: Rapid wet parasite suction flutter (~28Hz tremolo)
-    const suckOsc = this.ctx.createOscillator();
-    const suckGain = this.ctx.createGain();
-    const tremoloOsc = this.ctx.createOscillator();
-    const tremoloGain = this.ctx.createGain();
-
-    suckOsc.type = "sine";
-    suckOsc.frequency.setValueAtTime(320, t + 0.02);
-    suckOsc.frequency.exponentialRampToValueAtTime(95, t + 0.22);
-
-    tremoloOsc.frequency.setValueAtTime(28, t); // 28Hz rapid flutter
-    tremoloGain.gain.setValueAtTime(0.18, t);
-    tremoloOsc.connect(tremoloGain);
-
-    suckGain.gain.setValueAtTime(0.01, t);
-    suckGain.gain.linearRampToValueAtTime(0.35, t + 0.04);
-    suckGain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-    tremoloGain.connect(suckGain.gain);
-
-    suckOsc.connect(suckGain);
-    suckGain.connect(this.masterGain);
-
-    suckOsc.start(t + 0.02);
-    tremoloOsc.start(t + 0.02);
-    suckOsc.stop(t + 0.23);
-    tremoloOsc.stop(t + 0.23);
-  }
-
-  /**
-   * Jet dash: Hydrodynamic cavitation whoosh and protoplasmic contraction
+   * Action: Soft Water Splash / Hydrodynamic Push
+   * Short, gentle fluid displacement whoosh when executing a dash.
    */
   playDash() {
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx || this.isMuted || this.isPaused) return;
     this.resume();
 
     const t = this.ctx.currentTime;
 
-    // Filtered noise burst simulating fluid cavitation jet
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.28);
+    // Soft water splash noise burst (160ms)
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.18);
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
       output[i] = Math.random() * 2 - 1;
     }
 
-    const whiteNoise = this.ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
+    const noiseSource = this.ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = "bandpass";
-    filter.frequency.setValueAtTime(700, t);
-    filter.frequency.exponentialRampToValueAtTime(140, t + 0.26);
-    filter.Q.setValueAtTime(1.8, t);
+    filter.frequency.setValueAtTime(500, t);
+    filter.frequency.exponentialRampToValueAtTime(140, t + 0.16);
+    filter.Q.setValueAtTime(2.2, t);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.48, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.27);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(0.32, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
 
-    whiteNoise.connect(filter);
+    noiseSource.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
-    whiteNoise.start(t);
-    whiteNoise.stop(t + 0.28);
+    noiseSource.start(t);
+    noiseSource.stop(t + 0.18);
 
-    // Deep fluid displacement sub-thump
-    const subOsc = this.ctx.createOscillator();
-    const subGain = this.ctx.createGain();
-    subOsc.type = "sine";
-    subOsc.frequency.setValueAtTime(105, t);
-    subOsc.frequency.exponentialRampToValueAtTime(36, t + 0.22);
+    // Subtle fluid momentum sine pulse
+    const pushOsc = this.ctx.createOscillator();
+    const pushGain = this.ctx.createGain();
 
-    subGain.gain.setValueAtTime(0.38, t);
-    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.23);
+    pushOsc.type = "sine";
+    pushOsc.frequency.setValueAtTime(130, t);
+    pushOsc.frequency.exponentialRampToValueAtTime(65, t + 0.16);
 
-    subOsc.connect(subGain);
-    subGain.connect(this.masterGain);
+    pushGain.gain.setValueAtTime(0.001, t);
+    pushGain.gain.linearRampToValueAtTime(0.26, t + 0.015);
+    pushGain.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
 
-    subOsc.start(t);
-    subOsc.stop(t + 0.24);
+    pushOsc.connect(pushGain);
+    pushGain.connect(this.masterGain);
+
+    pushOsc.start(t);
+    pushOsc.stop(t + 0.18);
   }
 
   /**
-   * Soft rubbery membrane bounce against fluid boundaries
+   * Action: Gentle Fluid Friction / Membrane Deflection
+   * Soft, organic singing droplet when deflecting off arena bounds.
    */
   playBounce() {
-    if (!this.ctx || this.isMuted) return;
+    if (!this.ctx || this.isMuted || this.isPaused) return;
     this.resume();
 
     const t = this.ctx.currentTime;
@@ -525,59 +396,85 @@ class SoundSystem {
     const filter = this.ctx.createBiquadFilter();
 
     osc.type = "sine";
-    osc.frequency.setValueAtTime(130, t);
-    osc.frequency.exponentialRampToValueAtTime(50, t + 0.14);
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.exponentialRampToValueAtTime(110, t + 0.12);
 
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(220, t);
+    filter.frequency.setValueAtTime(260, t);
+    filter.Q.setValueAtTime(1.5, t);
 
-    gain.gain.setValueAtTime(0.25, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.linearRampToValueAtTime(0.22, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
 
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start(t);
-    osc.stop(t + 0.16);
+    osc.stop(t + 0.15);
   }
 
   /**
-   * Cellular lysis / Dissolution on Game Over
+   * Action: Subtle Parasite Fluid Perturbation
+   * A delicate, organic surface tension ripple when grazed by a parasite.
    */
-  playDeath() {
-    if (!this.ctx || this.isMuted) return;
+  playLeech() {
+    if (!this.ctx || this.isMuted || this.isPaused) return;
     this.resume();
 
     const t = this.ctx.currentTime;
-    // Initial membrane rupture burst
-    this.playEat(0.5);
 
-    // Descending bioluminescent chords dissolving in the abyss
-    const chord = [65.4, 82.4, 98.0, 130.8]; // C2, E2, G2, C3
+    // Dual soft liquid droplets (440Hz + 520Hz)
+    const freqs = [440, 520];
+    freqs.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.82, t + 0.12);
+
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(t + idx * 0.015);
+      osc.stop(t + 0.16);
+    });
+  }
+
+  /**
+   * Action: Gentle Cellular Dissolution (Game Over)
+   * A brief, soft liquid fade (three descending droplet tones over 650ms).
+   */
+  playDeath() {
+    if (!this.ctx || this.isMuted || this.isPaused) return;
+    this.resume();
+
+    const t = this.ctx.currentTime;
+    const chord = [240, 190, 140];
 
     chord.forEach((freq, idx) => {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
 
-      osc.type = idx % 2 === 0 ? "triangle" : "sine";
-      osc.frequency.setValueAtTime(freq, t);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.65, t + 2.2);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t + idx * 0.08);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + idx * 0.08 + 0.28);
 
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(280, t);
-      filter.frequency.exponentialRampToValueAtTime(45, t + 2.4);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(0.20, t + idx * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + idx * 0.08 + 0.32);
 
-      gain.gain.setValueAtTime(0.22, t);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 2.4);
-
-      osc.connect(filter);
-      filter.connect(gain);
+      osc.connect(gain);
       gain.connect(this.masterGain);
 
-      osc.start(t + 0.05);
-      osc.stop(t + 2.5);
+      osc.start(t + idx * 0.08);
+      osc.stop(t + idx * 0.08 + 0.35);
     });
   }
 }
@@ -590,9 +487,21 @@ class SoundSystem {
  * and floating mass indicator text.
  */
 class Particle {
-  constructor(x, y, vx, vy, color, radius, life) {
+  constructor(x = 0, y = 0, vx = 0, vy = 0, color = "#fff", radius = 3, life = 30) {
     this.pos = new Vector2D(x, y);
     this.vel = new Vector2D(vx, vy);
+    this.color = color;
+    this.radius = radius;
+    this.baseRadius = radius;
+    this.maxLife = life;
+    this.life = life;
+    this.isDead = false;
+    this.drag = 0.94;
+  }
+
+  init(x, y, vx, vy, color, radius, life) {
+    this.pos.set(x, y);
+    this.vel.set(vx, vy);
     this.color = color;
     this.radius = radius;
     this.baseRadius = radius;
@@ -617,21 +526,26 @@ class Particle {
     const progress = this.life / this.maxLife;
     const currentRadius = Math.max(0.2, this.baseRadius * progress);
 
-    ctx.save();
     ctx.globalAlpha = Math.max(0, progress);
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = this.color;
     ctx.fillStyle = this.color;
-
     ctx.beginPath();
     ctx.arc(this.pos.x, this.pos.y, currentRadius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
   }
 }
 class ShockwaveRing {
-  constructor(x, y, maxRadius, color = "rgba(57, 255, 20, 0.8)", duration = 25) {
+  constructor(x = 0, y = 0, maxRadius = 30, color = "rgba(57, 255, 20, 0.8)", duration = 25) {
     this.pos = new Vector2D(x, y);
+    this.currentRadius = 4;
+    this.maxRadius = maxRadius;
+    this.color = color;
+    this.duration = duration;
+    this.life = duration;
+    this.isDead = false;
+  }
+
+  init(x, y, maxRadius, color, duration) {
+    this.pos.set(x, y);
     this.currentRadius = 4;
     this.maxRadius = maxRadius;
     this.color = color;
@@ -648,23 +562,17 @@ class ShockwaveRing {
     }
 
     const t = 1 - this.life / this.duration;
-    // Ease out cubic
     this.currentRadius = 4 + (this.maxRadius - 4) * (1 - Math.pow(1 - t, 3));
   }
 
   render(ctx) {
     const alpha = Math.max(0, this.life / this.duration);
-    ctx.save();
     ctx.strokeStyle = this.color;
     ctx.globalAlpha = alpha * 0.8;
-    ctx.lineWidth = Math.max(1, 4 * alpha);
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = this.color;
-
+    ctx.lineWidth = Math.max(1, 3.5 * alpha);
     ctx.beginPath();
     ctx.arc(this.pos.x, this.pos.y, this.currentRadius, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.restore();
   }
 }
 class FloatingText {
@@ -691,16 +599,12 @@ class FloatingText {
 
   render(ctx) {
     const alpha = Math.max(0, this.life / this.maxLife);
-    ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.font = `600 ${this.fontSize}px 'JetBrains Mono', 'Fira Code', monospace`;
+    ctx.font = `600 ${this.fontSize}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = this.color;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = this.color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(this.text, this.pos.x, this.pos.y);
-    ctx.restore();
   }
 }
 class ParticleManager {
@@ -708,34 +612,59 @@ class ParticleManager {
     this.particles = [];
     this.shockwaves = [];
     this.floatingTexts = [];
+
+    // Pre-allocated object pool to prevent GC frame drops
+    this.particlePool = [];
+    for (let i = 0; i < 200; i++) {
+      this.particlePool.push(new Particle());
+    }
+
+    this.shockwavePool = [];
+    for (let i = 0; i < 30; i++) {
+      this.shockwavePool.push(new ShockwaveRing());
+    }
   }
 
-  createEatBurst(x, y, color, count = 18, baseRadius = 15) {
+  spawnParticle(x, y, vx, vy, color, radius, life) {
+    let p = this.particlePool.pop();
+    if (!p) p = new Particle();
+    p.init(x, y, vx, vy, color, radius, life);
+    this.particles.push(p);
+  }
+
+  spawnShockwave(x, y, maxRadius, color, duration) {
+    let s = this.shockwavePool.pop();
+    if (!s) s = new ShockwaveRing();
+    s.init(x, y, maxRadius, color, duration);
+    this.shockwaves.push(s);
+  }
+
+  createEatBurst(x, y, color, count = 16, baseRadius = 15) {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speed = randomRange(2, 6.5);
+      const speed = randomRange(2, 5.5);
       const vx = Math.cos(angle) * speed;
       const vy = Math.sin(angle) * speed;
-      const pRadius = randomRange(1.5, Math.min(6, baseRadius * 0.25));
-      const life = randomRange(25, 45);
-      this.particles.push(new Particle(x, y, vx, vy, color, pRadius, life));
+      const pRadius = randomRange(1.5, Math.min(5, baseRadius * 0.22));
+      const life = randomRange(20, 38);
+      this.spawnParticle(x, y, vx, vy, color, pRadius, life);
     }
-    this.shockwaves.push(new ShockwaveRing(x, y, baseRadius * 1.8, color, 20));
+    this.spawnShockwave(x, y, baseRadius * 1.6, color, 18);
   }
 
   createDashTrail(x, y, oppositeAngle, color, radius) {
     const count = 4;
     for (let i = 0; i < count; i++) {
-      const spread = (Math.random() - 0.5) * 0.8;
+      const spread = (Math.random() - 0.5) * 0.7;
       const angle = oppositeAngle + spread;
-      const speed = randomRange(2.5, 6);
+      const speed = randomRange(2.2, 5);
       const vx = Math.cos(angle) * speed;
       const vy = Math.sin(angle) * speed;
-      const pRadius = randomRange(2, Math.max(3, radius * 0.15));
-      const life = randomRange(20, 35);
-      this.particles.push(new Particle(x, y, vx, vy, color, pRadius, life));
+      const pRadius = randomRange(2, Math.max(3, radius * 0.14));
+      const life = randomRange(18, 30);
+      this.spawnParticle(x, y, vx, vy, color, pRadius, life);
     }
-    this.shockwaves.push(new ShockwaveRing(x, y, radius * 1.2, color, 16));
+    this.spawnShockwave(x, y, radius * 1.1, color, 15);
   }
 
   addFloatingText(x, y, text, color, fontSize) {
@@ -744,16 +673,24 @@ class ParticleManager {
 
   update(dt = 1) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
-      this.particles[i].update(dt);
-      if (this.particles[i].isDead) {
+      const p = this.particles[i];
+      p.update(dt);
+      if (p.isDead) {
         this.particles.splice(i, 1);
+        if (this.particlePool.length < 250) {
+          this.particlePool.push(p);
+        }
       }
     }
 
     for (let i = this.shockwaves.length - 1; i >= 0; i--) {
-      this.shockwaves[i].update(dt);
-      if (this.shockwaves[i].isDead) {
+      const s = this.shockwaves[i];
+      s.update(dt);
+      if (s.isDead) {
         this.shockwaves.splice(i, 1);
+        if (this.shockwavePool.length < 50) {
+          this.shockwavePool.push(s);
+        }
       }
     }
 
@@ -765,22 +702,40 @@ class ParticleManager {
     }
   }
 
-  render(ctx) {
-    // Render shockwaves first (beneath particles)
-    for (const shockwave of this.shockwaves) {
-      shockwave.render(ctx);
+  render(ctx, camera) {
+    // 1. Render shockwaves
+    for (let i = 0; i < this.shockwaves.length; i++) {
+      const s = this.shockwaves[i];
+      if (camera && !camera.isVisible(s.pos.x, s.pos.y, s.maxRadius)) continue;
+      s.render(ctx);
     }
-    for (const particle of this.particles) {
-      particle.render(ctx);
+
+    // 2. Render particles using GPU-friendly additive bioluminescence (no shadowBlur)
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+      if (camera && !camera.isVisible(p.pos.x, p.pos.y, 16)) continue;
+      p.render(ctx);
     }
-    for (const ft of this.floatingTexts) {
+    ctx.restore();
+
+    // 3. Render floating texts
+    for (let i = 0; i < this.floatingTexts.length; i++) {
+      const ft = this.floatingTexts[i];
+      if (camera && !camera.isVisible(ft.pos.x, ft.pos.y, 60)) continue;
       ft.render(ctx);
     }
+    ctx.globalAlpha = 1.0;
   }
 
   clear() {
-    this.particles = [];
-    this.shockwaves = [];
+    while (this.particles.length > 0) {
+      this.particlePool.push(this.particles.pop());
+    }
+    while (this.shockwaves.length > 0) {
+      this.shockwavePool.push(this.shockwaves.pop());
+    }
     this.floatingTexts = [];
   }
 }
@@ -951,20 +906,55 @@ class Cell {
     this.stretchFactor = lerp(this.stretchFactor, targetStretch, 0.1);
   }
 
+  buildMembranePath(ctx) {
+    const num = this.numVertices;
+    const vX = Cell.vX;
+    const vY = Cell.vY;
+    const effectiveRadius = this.radius * (1 + this.elasticBounce);
+    const heading = this.vel.magSq() > 0.01 ? this.vel.heading() : 0;
+    const stretchDelta = this.stretchFactor - 1;
+    const squishDelta = this.squishFactor - 1;
+
+    for (let i = 0; i < num; i++) {
+      const angle = (i / num) * (Math.PI * 2);
+      const wave1 = Math.sin(angle * this.waveFreq1 + this.membranePhase) * this.waveAmp1;
+      const wave2 = Math.cos(angle * this.waveFreq2 - this.membranePhase * 1.3) * this.waveAmp2;
+      const breathing = Math.sin(this.membranePhase * 0.8) * 0.02;
+      const relAngle = angle - heading;
+      const velocitySquash = (Math.cos(relAngle) * stretchDelta) +
+                             (Math.abs(Math.sin(relAngle)) * squishDelta);
+
+      const r = effectiveRadius * (1 + wave1 + wave2 + breathing + velocitySquash);
+      vX[i] = Math.cos(angle) * r;
+      vY[i] = Math.sin(angle) * r;
+    }
+
+    ctx.beginPath();
+    const firstMidX = (vX[0] + vX[1]) * 0.5;
+    const firstMidY = (vY[0] + vY[1]) * 0.5;
+    ctx.moveTo(firstMidX, firstMidY);
+
+    for (let i = 1; i < num; i++) {
+      const nextIdx = (i + 1) % num;
+      const midX = (vX[i] + vX[nextIdx]) * 0.5;
+      const midY = (vY[i] + vY[nextIdx]) * 0.5;
+      ctx.quadraticCurveTo(vX[i], vY[i], midX, midY);
+    }
+    ctx.quadraticCurveTo(vX[0], vY[0], firstMidX, firstMidY);
+    ctx.closePath();
+  }
+
   getMembraneVertices() {
+    // Retained for backward-compatibility
     const vertices = [];
     const effectiveRadius = this.radius * (1 + this.elasticBounce);
     const heading = this.vel.magSq() > 0.01 ? this.vel.heading() : 0;
 
     for (let i = 0; i < this.numVertices; i++) {
       const angle = (i / this.numVertices) * Math.PI * 2;
-
-      // Multi-frequency biological wave undulation
       const wave1 = Math.sin(angle * this.waveFreq1 + this.membranePhase) * this.waveAmp1;
       const wave2 = Math.cos(angle * this.waveFreq2 - this.membranePhase * 1.3) * this.waveAmp2;
       const breathing = Math.sin(this.membranePhase * 0.8) * 0.02;
-
-      // Velocity alignment: Stretch along movement heading, compress perpendicular
       const relAngle = angle - heading;
       const velocitySquash = (Math.cos(relAngle) * (this.stretchFactor - 1)) +
                              (Math.abs(Math.sin(relAngle)) * (this.squishFactor - 1));
@@ -977,7 +967,6 @@ class Cell {
         r: r
       });
     }
-
     return vertices;
   }
 
@@ -985,37 +974,20 @@ class Cell {
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
 
-    const vertices = this.getMembraneVertices();
-    if (vertices.length < 3) {
-      ctx.restore();
-      return;
-    }
-
-    // 1. Bioluminescent Glow Halo
+    // 1. Bioluminescent Glow Halo (Optimized: disabled for tiny plankton, capped for others)
     const isFlashing = this.flashTimer > 0;
-    const glowBlur = isFlashing ? 32 : Math.min(26, Math.max(12, this.radius * 0.45));
-    ctx.shadowBlur = glowBlur;
-    ctx.shadowColor = isFlashing ? (this.flashColor || "#ffffff") : this.glowColor;
-
-    // 2. Build Organic Spline Membrane Path
-    ctx.beginPath();
-    const firstMid = {
-      x: (vertices[0].x + vertices[1].x) / 2,
-      y: (vertices[0].y + vertices[1].y) / 2
-    };
-    ctx.moveTo(firstMid.x, firstMid.y);
-
-    for (let i = 1; i < vertices.length; i++) {
-      const next = vertices[(i + 1) % vertices.length];
-      const mid = {
-        x: (vertices[i].x + next.x) / 2,
-        y: (vertices[i].y + next.y) / 2
-      };
-      ctx.quadraticCurveTo(vertices[i].x, vertices[i].y, mid.x, mid.y);
+    if (isFlashing) {
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = this.flashColor || "#ffffff";
+    } else if (this.radius >= 18) {
+      ctx.shadowBlur = Math.min(14, this.radius * 0.35);
+      ctx.shadowColor = this.glowColor;
+    } else {
+      ctx.shadowBlur = 0;
     }
-    // Connect back to the first midpoint
-    ctx.quadraticCurveTo(vertices[0].x, vertices[0].y, firstMid.x, firstMid.y);
-    ctx.closePath();
+
+    // 2. Build Organic Spline Membrane Path (zero object allocations)
+    this.buildMembranePath(ctx);
 
     // 3. Translucent Cytoplasm Shading with Multi-Stop Radial Gradient
     const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 1.1);
@@ -1043,6 +1015,7 @@ class Cell {
     ctx.lineWidth = Math.max(1.8, Math.min(4.5, this.radius * 0.08));
     ctx.strokeStyle = isFlashing ? (this.flashColor || "#ffffff") : hsla(this.hue, 100, 75, 0.9);
     ctx.stroke();
+    ctx.shadowBlur = 0; // Clear blur immediately to protect subsequent draws
 
     // 5. Internal Organelles (Nucleus & floating structures)
     this.renderOrganelles(ctx);
@@ -1051,11 +1024,20 @@ class Cell {
   }
 
   renderOrganelles(ctx) {
+    // LOD: Plankton (radius < 16) only need a simple, fast nucleus dot
+    if (this.radius < 16) {
+      ctx.fillStyle = hsla((this.hue + 25) % 360, 95, 80, 0.7);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
     ctx.save();
-    ctx.shadowBlur = 0;
     ctx.rotate(this.organelleAngle);
 
-    for (const org of this.organelles) {
+    for (let i = 0; i < this.organelles.length; i++) {
+      const org = this.organelles[i];
       const dist = this.radius * org.distRatio;
       const x = Math.cos(org.angleOffset) * dist;
       const y = Math.sin(org.angleOffset) * dist;
@@ -1064,11 +1046,9 @@ class Cell {
         const nRadius = this.radius * org.radiusRatio;
 
         // Nucleus outer aura
-        ctx.save();
-        ctx.translate(x, y);
         ctx.fillStyle = hsla((this.hue + 15) % 360, 90, 65, 0.4);
         ctx.beginPath();
-        ctx.arc(0, 0, nRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, nRadius, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = hsla((this.hue + 30) % 360, 100, 80, 0.75);
@@ -1078,50 +1058,42 @@ class Cell {
         // Dense Nucleolus center
         ctx.fillStyle = hsla((this.hue + 45) % 360, 100, 90, 0.85);
         ctx.beginPath();
-        ctx.arc(0, 0, nRadius * 0.45, 0, Math.PI * 2);
+        ctx.arc(x, y, nRadius * 0.45, 0, Math.PI * 2);
         ctx.fill();
 
         // Chromatin spots
-        for (const node of org.chromatinNodes) {
-          const nx = Math.cos(node.angle) * (nRadius * node.dist);
-          const ny = Math.sin(node.angle) * (nRadius * node.dist);
+        const nodes = org.chromatinNodes;
+        for (let j = 0; j < nodes.length; j++) {
+          const node = nodes[j];
+          const nx = x + Math.cos(node.angle) * (nRadius * node.dist);
+          const ny = y + Math.sin(node.angle) * (nRadius * node.dist);
           ctx.fillStyle = hsla(this.hue, 100, 95, 0.7);
           ctx.beginPath();
           ctx.arc(nx, ny, nRadius * node.r, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.restore();
       } else if (org.type === "mitochondria") {
         const mSize = this.radius * org.sizeRatio;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(org.angleOffset * 1.5);
         ctx.fillStyle = org.color;
         ctx.beginPath();
-        ctx.ellipse(0, 0, mSize * org.aspect, mSize, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, mSize * org.aspect, mSize, org.angleOffset * 1.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
       } else if (org.type === "vacuole") {
         const vRadius = this.radius * org.sizeRatio;
-        ctx.save();
-        ctx.translate(x, y);
         ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
         ctx.beginPath();
-        ctx.arc(0, 0, vRadius, 0, Math.PI * 2);
+        ctx.arc(x, y, vRadius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.restore();
       }
     }
 
     ctx.restore();
   }
 }
+
+// Pre-allocated static arrays for zero-garbage membrane generation
+Cell.vX = new Float32Array(64);
+Cell.vY = new Float32Array(64);
 
 
 /* === js/player.js === */
@@ -1260,11 +1232,12 @@ class Player extends Cell {
       const auraAlpha = (this.dashGlowTimer / 14) * 0.7;
       ctx.strokeStyle = `rgba(57, 255, 20, ${auraAlpha})`;
       ctx.lineWidth = 3;
-      ctx.shadowBlur = 24;
+      ctx.shadowBlur = 14; // Streamlined from 24 to 14
       ctx.shadowColor = "#39ff14";
       ctx.beginPath();
       ctx.arc(0, 0, this.radius * 1.35, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.restore();
     }
   }
@@ -1275,13 +1248,14 @@ class Player extends Cell {
 
     const speed = this.vel.mag();
     const moveHeading = speed > 0.1 ? this.vel.heading() : 0;
-    const vertices = this.getMembraneVertices();
-    const numCilia = Math.max(28, Math.min(50, Math.floor(this.radius * 1.2)));
+    const numCilia = Math.max(24, Math.min(44, Math.floor(this.radius * 1.1)));
 
     ctx.strokeStyle = hsla(this.hue, 100, 75, 0.8);
     ctx.lineWidth = 1.3;
     ctx.lineCap = "round";
 
+    // Batch all cilia paths in a single draw call (reduces 40+ draw calls to 1)
+    ctx.beginPath();
     for (let i = 0; i < numCilia; i++) {
       const angle = (i / numCilia) * Math.PI * 2;
 
@@ -1309,11 +1283,10 @@ class Player extends Cell {
       const ctrlX = baseX + Math.cos(ctrlAngle) * (ciliumLength * 0.5);
       const ctrlY = baseY + Math.sin(ctrlAngle) * (ciliumLength * 0.5);
 
-      ctx.beginPath();
       ctx.moveTo(baseX, baseY);
       ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -1389,11 +1362,12 @@ class AICell extends Cell {
 
     let steerForce = new Vector2D(0, 0);
 
-    // 1. World boundary soft constraint
-    const distFromOrigin = this.pos.mag();
-    if (distFromOrigin > worldRadius * 0.85) {
-      const returnForce = this.pos.clone().mult(-1).normalize().mult(0.35);
-      this.applyForce(returnForce);
+    // 1. World boundary soft constraint (avoid Math.hypot when within arena)
+    const originDistSq = this.pos.magSq();
+    const boundRadius = worldRadius * 0.85;
+    if (originDistSq > boundRadius * boundRadius) {
+      const originDist = Math.sqrt(originDistSq) || 1;
+      this.applyForce(new Vector2D((-this.pos.x / originDist) * 0.35, (-this.pos.y / originDist) * 0.35));
       return;
     }
 
@@ -1408,16 +1382,25 @@ class AICell extends Cell {
     // 3. Parasite: Fast, aggressive swarm tracking the player
     if (this.type === CELL_TYPES.PARASITE) {
       if (player && !player.isDead) {
-        const toPlayer = Vector2D.sub(player.pos, this.pos);
-        const distToPlayer = toPlayer.mag();
-
-        if (distToPlayer < this.sensorRadius) {
-          toPlayer.normalize();
-          // Add organic twitchy swarm jitter
-          const jitter = Vector2D.fromAngle(Math.random() * Math.PI * 2, 0.35);
-          toPlayer.add(jitter).normalize();
-          this.applyForce(toPlayer.mult(0.42));
-          return;
+        const dx = player.pos.x - this.pos.x;
+        const dy = player.pos.y - this.pos.y;
+        const reach = this.sensorRadius;
+        if (Math.abs(dx) <= reach && Math.abs(dy) <= reach) {
+          const dSq = dx * dx + dy * dy;
+          if (dSq < reach * reach) {
+            const dist = Math.sqrt(dSq) || 1;
+            const toPlayerX = dx / dist;
+            const toPlayerY = dy / dist;
+            // Add organic twitchy swarm jitter
+            const jitterAngle = Math.random() * Math.PI * 2;
+            const jitterX = Math.cos(jitterAngle) * 0.35;
+            const jitterY = Math.sin(jitterAngle) * 0.35;
+            const finalX = toPlayerX + jitterX;
+            const finalY = toPlayerY + jitterY;
+            const finalMag = Math.hypot(finalX, finalY) || 1;
+            this.applyForce(new Vector2D((finalX / finalMag) * 0.42, (finalY / finalMag) * 0.42));
+            return;
+          }
         }
       }
       // Out of range: Rapid search wander
@@ -1427,22 +1410,27 @@ class AICell extends Cell {
       return;
     }
 
-    // 4. Scan for threats & food
+    // 4. Scan for threats & food using fast AABB early exit and squared distances
     let closestThreat = null;
-    let closestThreatDist = Infinity;
+    let closestThreatDistSq = Infinity;
     let closestFood = null;
-    let closestFoodDist = Infinity;
+    let closestFoodDistSq = Infinity;
 
     // Check Player
     if (player && !player.isDead) {
-      const d = this.pos.dist(player.pos);
-      if (d < this.sensorRadius + player.radius) {
-        if (player.radius > this.radius * 1.06) {
-          closestThreat = player;
-          closestThreatDist = d;
-        } else if (this.radius > player.radius * 1.06 && this.type === CELL_TYPES.PREDATOR) {
-          closestFood = player;
-          closestFoodDist = d;
+      const maxReach = this.sensorRadius + player.radius;
+      const dx = player.pos.x - this.pos.x;
+      const dy = player.pos.y - this.pos.y;
+      if (Math.abs(dx) <= maxReach && Math.abs(dy) <= maxReach) {
+        const dSq = dx * dx + dy * dy;
+        if (dSq <= maxReach * maxReach) {
+          if (player.radius > this.radius * 1.06) {
+            closestThreat = player;
+            closestThreatDistSq = dSq;
+          } else if (this.radius > player.radius * 1.06 && this.type === CELL_TYPES.PREDATOR) {
+            closestFood = player;
+            closestFoodDistSq = dSq;
+          }
         }
       }
     }
@@ -1452,29 +1440,36 @@ class AICell extends Cell {
       const other = neighbors[i];
       if (other === this || other.isDead) continue;
 
-      const d = this.pos.dist(other.pos);
-      if (d > this.sensorRadius + other.radius) continue;
+      const maxReach = this.sensorRadius + other.radius;
+      const dx = other.pos.x - this.pos.x;
+      if (Math.abs(dx) > maxReach) continue;
+      const dy = other.pos.y - this.pos.y;
+      if (Math.abs(dy) > maxReach) continue;
+
+      const dSq = dx * dx + dy * dy;
+      if (dSq > maxReach * maxReach) continue;
 
       // Is other cell dangerous to us?
       if (other.radius > this.radius * 1.06) {
-        if (d < closestThreatDist) {
+        if (dSq < closestThreatDistSq) {
           closestThreat = other;
-          closestThreatDist = d;
+          closestThreatDistSq = dSq;
         }
       }
       // Is other cell edible for us?
       else if (this.radius > other.radius * 1.06 && (this.type === CELL_TYPES.PREDATOR || other.type === CELL_TYPES.PLANKTON)) {
-        if (d < closestFoodDist) {
+        if (dSq < closestFoodDistSq) {
           closestFood = other;
-          closestFoodDist = d;
+          closestFoodDistSq = dSq;
         }
       }
     }
 
-    // 4. Behavioral execution
+    // 5. Behavioral execution
     // Priority A: Flee from predators
     if (closestThreat) {
       const fleeVec = Vector2D.sub(this.pos, closestThreat.pos).normalize();
+      const closestThreatDist = Math.sqrt(closestThreatDistSq);
       const urgency = clamp(1 - (closestThreatDist / this.sensorRadius), 0.3, 1.0);
       steerForce.add(fleeVec.mult(0.36 * urgency));
     }
@@ -1516,6 +1511,11 @@ class BackgroundSystem {
 
     // Subtle fluid grid spacing
     this.gridSpacing = 160;
+
+    // Cached gradient for screen background
+    this.bgGrad = null;
+    this.cachedW = 0;
+    this.cachedH = 0;
   }
 
   createBokehOrbs(count, minR, maxR, minAlpha, maxAlpha) {
@@ -1578,21 +1578,24 @@ class BackgroundSystem {
 
   update(dt = 1) {
     // 1. Animate far nebula bokeh
-    for (const b of this.farBokeh) {
+    for (let i = 0; i < this.farBokeh.length; i++) {
+      const b = this.farBokeh[i];
       b.x += Math.cos(b.driftAngle) * b.driftSpeed * dt;
       b.y += Math.sin(b.driftAngle) * b.driftSpeed * dt;
       b.pulsePhase += b.pulseSpeed * dt;
     }
 
     // 2. Animate mid-depth spores
-    for (const s of this.midSpores) {
+    for (let i = 0; i < this.midSpores.length; i++) {
+      const s = this.midSpores[i];
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.pulsePhase += s.pulseSpeed * dt;
     }
 
     // 3. Animate near marine snow
-    for (const s of this.nearSnow) {
+    for (let i = 0; i < this.nearSnow.length; i++) {
+      const s = this.nearSnow[i];
       s.x += s.vx * dt;
       s.y += s.vy * dt;
       s.flickerPhase += s.flickerSpeed * dt;
@@ -1600,30 +1603,45 @@ class BackgroundSystem {
   }
 
   render(ctx, camera, viewWidth, viewHeight) {
-    // 1. Deep abyss vignette: Alien dark murky purple / void violet
-    ctx.save();
-    const bgGrad = ctx.createRadialGradient(
-      viewWidth / 2, viewHeight / 2, 70,
-      viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
-    );
-    bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
-    bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
-    bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
+    // 1. Deep abyss vignette: Cached radial gradient
+    if (this.cachedW !== viewWidth || this.cachedH !== viewHeight || !this.bgGrad) {
+      this.cachedW = viewWidth;
+      this.cachedH = viewHeight;
+      this.bgGrad = ctx.createRadialGradient(
+        viewWidth / 2, viewHeight / 2, 70,
+        viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
+      );
+      this.bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
+      this.bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
+      this.bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
+    }
 
-    ctx.fillStyle = bgGrad;
+    ctx.fillStyle = this.bgGrad;
     ctx.fillRect(0, 0, viewWidth, viewHeight);
-    ctx.restore();
 
-    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12)
+    // Viewport half-dimensions in world scale
+    const halfW = (viewWidth / 2) / camera.zoom;
+    const halfH = (viewHeight / 2) / camera.zoom;
+
+    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12) with frustum culling
     ctx.save();
     const farParallax = 0.12;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * farParallax, -camera.pos.y * farParallax);
 
-    for (const b of this.farBokeh) {
+    const farCamX = camera.pos.x * farParallax;
+    const farCamY = camera.pos.y * farParallax;
+
+    for (let i = 0; i < this.farBokeh.length; i++) {
+      const b = this.farBokeh[i];
       const pulse = 1 + Math.sin(b.pulsePhase) * 0.14;
       const r = b.radius * pulse;
+
+      // Frustum culling: skip off-screen orbs
+      if (Math.abs(b.x - farCamX) > halfW + r || Math.abs(b.y - farCamY) > halfH + r) {
+        continue;
+      }
 
       const bokehGrad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
       bokehGrad.addColorStop(0, hsla(b.hue, 90, 65, b.alpha * 1.5));
@@ -1637,16 +1655,25 @@ class BackgroundSystem {
     }
     ctx.restore();
 
-    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35)
+    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35) with frustum culling
     ctx.save();
     const midParallax = 0.35;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * midParallax, -camera.pos.y * midParallax);
 
-    for (const s of this.midSpores) {
+    const midCamX = camera.pos.x * midParallax;
+    const midCamY = camera.pos.y * midParallax;
+
+    for (let i = 0; i < this.midSpores.length; i++) {
+      const s = this.midSpores[i];
       const pulse = 1 + Math.sin(s.pulsePhase) * 0.2;
       const r = s.radius * pulse;
+
+      // Frustum culling: skip off-screen spores
+      if (Math.abs(s.x - midCamX) > halfW + r || Math.abs(s.y - midCamY) > halfH + r) {
+        continue;
+      }
 
       const sporeGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
       sporeGrad.addColorStop(0, hsla(s.hue, 95, 70, s.alpha * 1.3));
@@ -1660,14 +1687,21 @@ class BackgroundSystem {
     }
     ctx.restore();
 
-    // 4. Layer 3: Near-Depth Marine Snow & Plankton Dust (Parallax factor ~0.60)
+    // 4. Layer 3: Near-Depth Marine Snow (Parallax factor ~0.60) with frustum culling
     ctx.save();
     const nearParallax = 0.60;
     ctx.translate(viewWidth / 2, viewHeight / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.pos.x * nearParallax, -camera.pos.y * nearParallax);
 
-    for (const s of this.nearSnow) {
+    const nearCamX = camera.pos.x * nearParallax;
+    const nearCamY = camera.pos.y * nearParallax;
+
+    for (let i = 0; i < this.nearSnow.length; i++) {
+      const s = this.nearSnow[i];
+      if (Math.abs(s.x - nearCamX) > halfW + s.radius || Math.abs(s.y - nearCamY) > halfH + s.radius) {
+        continue;
+      }
       const alpha = s.baseAlpha * (0.8 + Math.sin(s.flickerPhase) * 0.25);
       ctx.fillStyle = hsla(s.hue, 95, 75, alpha);
       ctx.beginPath();
@@ -1693,77 +1727,86 @@ class BackgroundSystem {
     const startY = Math.floor(top / this.gridSpacing) * this.gridSpacing;
     const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
 
-    // Time-based liquid membrane undulation (sine waves simulate underwater optical refraction)
+    // Time-based liquid membrane undulation
     const time = performance.now() * 0.0012;
-    const step = 32; // Segment density for smooth liquid curves
+    const step = 40; // Optimized segment density
 
     ctx.strokeStyle = "rgba(168, 85, 247, 0.12)"; // Ethereal alien violet grid
     ctx.lineWidth = 1.2;
 
-    // Vertical liquid undulating grid lines
+    // Batch all vertical and horizontal grid lines in a single stroke call
+    ctx.beginPath();
     for (let x = startX; x <= endX; x += this.gridSpacing) {
-      ctx.beginPath();
+      let first = true;
       for (let y = top - step; y <= bottom + step; y += step) {
         const waveX = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
                         + Math.cos(y * 0.016 - time * 0.8) * 3;
-        if (y <= top - step) {
+        if (first) {
           ctx.moveTo(waveX, y);
+          first = false;
         } else {
           ctx.lineTo(waveX, y);
         }
       }
-      ctx.stroke();
     }
 
-    // Horizontal liquid undulating grid lines
     for (let y = startY; y <= endY; y += this.gridSpacing) {
-      ctx.beginPath();
+      let first = true;
       for (let x = left - step; x <= right + step; x += step) {
         const waveY = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
                         + Math.cos(x * 0.016 - time * 0.8) * 3;
-        if (x <= left - step) {
+        if (first) {
           ctx.moveTo(x, waveY);
+          first = false;
         } else {
           ctx.lineTo(x, waveY);
         }
       }
-      ctx.stroke();
     }
+    ctx.stroke();
 
-    // Fine glowing coordinate nodes sitting on wave intersections
+    // Batch all coordinate nodes into a single fill call
     ctx.fillStyle = "rgba(57, 255, 20, 0.35)"; // Toxic green nodes
+    ctx.beginPath();
     for (let x = startX; x <= endX; x += this.gridSpacing) {
       for (let y = startY; y <= endY; y += this.gridSpacing) {
         const nx = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
                      + Math.cos(y * 0.016 - time * 0.8) * 3;
         const ny = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
                      + Math.cos(x * 0.016 - time * 0.8) * 3;
-        ctx.beginPath();
+        ctx.moveTo(nx + 1.8, ny);
         ctx.arc(nx, ny, 1.8, 0, Math.PI * 2);
-        ctx.fill();
       }
     }
+    ctx.fill();
 
-    // World Boundary Membrane (Pulsing dual violet-green bio-barrier)
-    const barrierPulse = Math.sin(time * 2) * 3;
+    // World Boundary Membrane: Frustum check (only draw if near or touching viewport)
+    const viewDiag = Math.hypot(halfW, halfH);
+    const camDist = Math.hypot(camera.pos.x, camera.pos.y);
+    const boundaryRadius = this.worldRadius;
 
-    // Inner glowing toxic green ring
-    ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
-    ctx.lineWidth = 5;
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = "#39ff14";
-    ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
-    ctx.stroke();
+    if (camDist + viewDiag >= boundaryRadius - 60 && camDist - viewDiag <= boundaryRadius + 60) {
+      const barrierPulse = Math.sin(time * 2) * 3;
 
-    // Outer glowing alien purple ring
-    ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
-    ctx.lineWidth = 3;
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = "#a855f7";
-    ctx.beginPath();
-    ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
-    ctx.stroke();
+      // Inner glowing toxic green ring
+      ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
+      ctx.lineWidth = 4;
+      ctx.shadowBlur = 12; // Streamlined from 25 to 12
+      ctx.shadowColor = "#39ff14";
+      ctx.beginPath();
+      ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Outer glowing alien purple ring
+      ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
+      ctx.lineWidth = 2.5;
+      ctx.shadowBlur = 10; // Streamlined from 20 to 10
+      ctx.shadowColor = "#a855f7";
+      ctx.beginPath();
+      ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
   }
@@ -1792,6 +1835,10 @@ class Camera {
     this.shakeIntensity = 0;
     this.shakeDecay = 0.9;
     this.shakeOffset = new Vector2D(0, 0);
+
+    // Reusable vectors to eliminate GC allocation in hot update loops
+    this._scratchWorld = new Vector2D(0, 0);
+    this._scratchScreen = new Vector2D(0, 0);
   }
 
   resize(width, height) {
@@ -1844,7 +1891,7 @@ class Camera {
     const worldX = centeredX / this.zoom + this.pos.x;
     const worldY = centeredY / this.zoom + this.pos.y;
 
-    return new Vector2D(worldX, worldY);
+    return this._scratchWorld.set(worldX, worldY);
   }
 
   worldToScreen(worldX, worldY) {
@@ -1854,7 +1901,7 @@ class Camera {
     const screenX = centeredX + (this.viewportWidth / 2 + this.shakeOffset.x);
     const screenY = centeredY + (this.viewportHeight / 2 + this.shakeOffset.y);
 
-    return new Vector2D(screenX, screenY);
+    return this._scratchScreen.set(screenX, screenY);
   }
 
   isVisible(worldX, worldY, radius = 50) {
@@ -1933,6 +1980,7 @@ class Game {
 
     // Input Tracking & Mobile Gestures
     this.mouseScreen = new Vector2D(canvas.width / 2, canvas.height / 2);
+    this.canvasRect = { left: 0, top: 0, width: canvas.width, height: canvas.height };
     this.isMouseDown = false;
     this.lastTapTime = 0;
     this.lastTapPos = new Vector2D(0, 0);
@@ -1946,9 +1994,12 @@ class Game {
 
   bindEvents() {
     window.addEventListener("resize", () => this.resize());
+    window.addEventListener("scroll", () => {
+      this.canvasRect = this.canvas.getBoundingClientRect();
+    }, { passive: true });
 
     window.addEventListener("mousemove", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
+      const rect = this.canvasRect || this.canvas.getBoundingClientRect();
       this.mouseScreen.set(e.clientX - rect.left, e.clientY - rect.top);
     });
 
@@ -1987,7 +2038,7 @@ class Game {
         this.sound.init();
 
         if (e.touches.length > 0) {
-          const rect = this.canvas.getBoundingClientRect();
+          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
           const touchX = e.touches[0].clientX - rect.left;
           const touchY = e.touches[0].clientY - rect.top;
 
@@ -2025,7 +2076,7 @@ class Game {
         e.preventDefault();
 
         if (e.touches.length > 0) {
-          const rect = this.canvas.getBoundingClientRect();
+          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
           this.mouseScreen.set(
             e.touches[0].clientX - rect.left,
             e.touches[0].clientY - rect.top
@@ -2076,6 +2127,7 @@ class Game {
   resize() {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
+    this.canvasRect = this.canvas.getBoundingClientRect();
     this.camera.resize(this.canvas.width, this.canvas.height);
   }
 
@@ -2093,9 +2145,11 @@ class Game {
   togglePause() {
     if (this.state === GAME_STATES.PLAYING) {
       this.state = GAME_STATES.PAUSED;
+      this.sound.pause();
       if (this.ui.pauseModal) this.ui.pauseModal.classList.remove("hidden");
     } else if (this.state === GAME_STATES.PAUSED) {
       this.state = GAME_STATES.PLAYING;
+      this.sound.resume();
       if (this.ui.pauseModal) this.ui.pauseModal.classList.add("hidden");
     }
   }
@@ -2283,13 +2337,20 @@ class Game {
     const pPos = this.player.pos;
     const pR = this.player.radius;
 
-    // Player vs AI
+    // Player vs AI: Fast AABB rejection + squared distance checks
     for (let i = 0; i < this.aiCells.length; i++) {
       const cell = this.aiCells[i];
       if (cell.isDead) continue;
 
-      const dist = pPos.dist(cell.pos);
       const eatDistance = (pR + cell.radius) * 0.88;
+      const dx = cell.pos.x - pPos.x;
+      if (Math.abs(dx) > eatDistance) continue;
+      const dy = cell.pos.y - pPos.y;
+      if (Math.abs(dy) > eatDistance) continue;
+
+      const distSq = dx * dx + dy * dy;
+      if (distSq > eatDistance * eatDistance) continue;
+      const dist = Math.sqrt(distSq);
 
       if (dist < eatDistance) {
         // Special Case: RED PARASITE leech attack!
@@ -2369,20 +2430,39 @@ class Game {
       }
     }
 
-    // AI vs AI collisions (Only for cells reasonably near the camera to save cycles)
+    // AI vs AI collisions (Only predators can eat, and only cells near player)
     const simRadius = 1600;
+    const simRadiusSq = simRadius * simRadius;
     for (let i = 0; i < this.aiCells.length; i++) {
       const cellA = this.aiCells[i];
-      if (cellA.isDead || cellA.pos.dist(pPos) > simRadius) continue;
+      if (cellA.isDead) continue;
+
+      const pAdx = cellA.pos.x - pPos.x;
+      if (Math.abs(pAdx) > simRadius) continue;
+      const pAdy = cellA.pos.y - pPos.y;
+      if (Math.abs(pAdy) > simRadius) continue;
+      if (pAdx * pAdx + pAdy * pAdy > simRadiusSq) continue;
 
       for (let j = i + 1; j < this.aiCells.length; j++) {
         const cellB = this.aiCells[j];
-        if (cellB.isDead || cellB.pos.dist(pPos) > simRadius) continue;
+        if (cellB.isDead) continue;
 
-        const dist = cellA.pos.dist(cellB.pos);
+        // In ecological food web, only PREDATOR hunts other AI cells
+        if (cellA.type !== CELL_TYPES.PREDATOR && cellB.type !== CELL_TYPES.PREDATOR) continue;
+
+        const pBdx = cellB.pos.x - pPos.x;
+        if (Math.abs(pBdx) > simRadius) continue;
+        const pBdy = cellB.pos.y - pPos.y;
+        if (Math.abs(pBdy) > simRadius) continue;
+
         const contactDist = (cellA.radius + cellB.radius) * 0.85;
+        const abDx = cellB.pos.x - cellA.pos.x;
+        if (Math.abs(abDx) > contactDist) continue;
+        const abDy = cellB.pos.y - cellA.pos.y;
+        if (Math.abs(abDy) > contactDist) continue;
 
-        if (dist < contactDist) {
+        const abDistSq = abDx * abDx + abDy * abDy;
+        if (abDistSq < contactDist * contactDist) {
           if (cellA.radius > cellB.radius * 1.15 && cellA.type === CELL_TYPES.PREDATOR) {
             cellA.eat(cellB);
             cellB.isDead = true;
@@ -2391,6 +2471,7 @@ class Game {
             cellB.eat(cellA);
             cellA.isDead = true;
             this.particles.createEatBurst(cellA.pos.x, cellA.pos.y, cellA.glowColor, 10, cellA.radius);
+            break; // cellA died, can no longer interact with remaining cells
           }
         }
       }
@@ -2465,7 +2546,7 @@ class Game {
     this.background.renderWorldGrid(ctx, this.camera, w, h);
 
     // Render Particles beneath cells (shockwaves)
-    this.particles.render(ctx);
+    this.particles.render(ctx, this.camera);
 
     // Render AI Cells (Frustum Culled)
     for (let i = 0; i < this.aiCells.length; i++) {
