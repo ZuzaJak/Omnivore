@@ -2,24 +2,6 @@
 
 A dark, atmospheric 2D biological web game developed with HTML5 Canvas and vanilla JavaScript. Experience life in a deep primordial abyss: evolve from a fragile microscopic organism into an apex predator while managing viscous fluid inertia and jet-propulsion dashing.
 
----
-
-## Quick Start
-
-You can run Omnivore in two easy ways:
-
-### Option 1: Direct File Double-Click
-Simply double-click `index.html` in Windows Explorer. Omnivore includes an automatic loader that runs immediately without requiring any local server or dependencies.
-
-### Option 2: Local Web Server (Recommended for Native ES Modules)
-Double-click `start.bat` or run:
-```bash
-python -m http.server 8000
-```
-Then open `http://localhost:8000` in your browser.
-
----
-
 ## Game Mechanics
 
 - **Fluid Locomotion**: The player cell constantly swims toward your mouse cursor. The physics simulates movement in a viscous fluid with inertia, drag, and gradual acceleration.
@@ -54,20 +36,3 @@ Then open `http://localhost:8000` in your browser.
 | **Jet Dash** | Left Click / Spacebar / Touch Tap |
 | **Pause / Resume** | [P] or [Escape] |
 | **Toggle Sound** | [M] or Top-Right Audio Button |
-
----
-
-## Architecture
-
-- `index.html` — Fullscreen canvas viewport, HUD, glassmorphism overlays
-- `css/style.css` — Dark matter atmosphere, responsive layout, glowing HUD
-- `js/math.js` — 2D vector mathematics and procedural utilities
-- `js/audio.js` — Web Audio API procedural sound engine
-- `js/particle.js` — Bioluminescent debris, shockwaves, floating HUD indicators
-- `js/cell.js` — Base Cell class with organic membrane undulation and organelles
-- `js/player.js` — Player subclass with cilia locomotion and dash mechanics
-- `js/aiCell.js` — AI organisms with predator/prey steering behaviors
-- `js/background.js` — Parallax bokeh layers and marine snow
-- `js/camera.js` — Centered player camera with dynamic zoom & screen shake
-- `js/game.js` — Game engine loop, spatial collision resolution, and lifecycle
-- `js/main.js` — DOM bootstrap and initialization
