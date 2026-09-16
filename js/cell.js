@@ -1,7 +1,7 @@
 /**
- * Omnivore - Base Biological Cell Class
- * Implements organic membrane undulation, internal organelle simulation,
- * bioluminescent rendering, and viscous fluid physics.
+ * Omnivore - Base Biological Cell Class (3D Three.js Gelatinous Organism)
+ * Implements 3D physical transmission membrane, internal glowing organelles,
+ * organic undulation, velocity squish/stretch, and 2D viscous fluid mechanics.
  */
 
 import { Vector2D, clamp, lerp, randomRange, hsla } from "./math.js";
@@ -52,6 +52,117 @@ export class Cell {
     this.organelles = this.generateOrganelles();
 
     this.isDead = false;
+
+    // Three.js 3D Rendering Object Group
+    this.threeGroup = null;
+    this.membraneMesh = null;
+    this.nucleusMesh = null;
+    this.organelleMeshes = [];
+    this.membraneMaterial = null;
+    this.nucleusMaterial = null;
+    this.initThreeObject();
+  }
+
+  static getOuterGeometry() {
+    const THREE = window.THREE;
+    if (!Cell._outerGeo && THREE) {
+      Cell._outerGeo = new THREE.SphereGeometry(1, 24, 18);
+    }
+    return Cell._outerGeo;
+  }
+
+  static getNucleusGeometry() {
+    const THREE = window.THREE;
+    if (!Cell._nucleusGeo && THREE) {
+      Cell._nucleusGeo = new THREE.SphereGeometry(1, 16, 12);
+    }
+    return Cell._nucleusGeo;
+  }
+
+  static getOrganelleGeometry() {
+    const THREE = window.THREE;
+    if (!Cell._organelleGeo && THREE) {
+      Cell._organelleGeo = new THREE.SphereGeometry(1, 12, 8);
+    }
+    return Cell._organelleGeo;
+  }
+
+  initThreeObject() {
+    const THREE = window.THREE;
+    if (!THREE) return;
+
+    this.threeGroup = new THREE.Group();
+    this.threeGroup.position.set(this.pos.x, this.pos.y, 0);
+
+    const baseColorObj = new THREE.Color().setHSL(this.hue / 360, this.saturation / 100, this.lightness / 100);
+    const glowColorObj = new THREE.Color().setHSL(this.hue / 360, 1.0, 0.62);
+    const coreColorObj = new THREE.Color().setHSL(((this.hue + 18) % 360) / 360, 1.0, 0.72);
+
+    this.glowColorHex = glowColorObj.getHex();
+
+    // 1. Translucent 3D Gelatinous Outer Membrane
+    // MeshPhysicalMaterial provides true physical transmission, subsurface refraction & shine
+    const outerGeo = Cell.getOuterGeometry();
+    if (outerGeo) {
+      this.membraneMaterial = new THREE.MeshPhysicalMaterial({
+        color: baseColorObj,
+        emissive: glowColorObj,
+        emissiveIntensity: 0.35,
+        roughness: 0.12,
+        metalness: 0.05,
+        transmission: 0.82,
+        ior: 1.33, // Organic fluid index of refraction
+        transparent: true,
+        opacity: 0.86,
+        depthWrite: false
+      });
+      this.membraneMesh = new THREE.Mesh(outerGeo, this.membraneMaterial);
+      this.threeGroup.add(this.membraneMesh);
+    }
+
+    // 2. Bioluminescent Inner Nucleus
+    const nucleusGeo = Cell.getNucleusGeometry();
+    if (nucleusGeo) {
+      this.nucleusMaterial = new THREE.MeshStandardMaterial({
+        color: coreColorObj,
+        emissive: coreColorObj,
+        emissiveIntensity: 0.85,
+        roughness: 0.25,
+        metalness: 0.1
+      });
+      this.nucleusMesh = new THREE.Mesh(nucleusGeo, this.nucleusMaterial);
+      this.nucleusMesh.position.set(this.radius * 0.12, 0, 1);
+      this.threeGroup.add(this.nucleusMesh);
+    }
+
+    // 3. Floating Organelles (Mitochondria / Vacuoles)
+    const organelleGeo = Cell.getOrganelleGeometry();
+    if (organelleGeo && this.organelles) {
+      for (let i = 0; i < this.organelles.length; i++) {
+        const org = this.organelles[i];
+        if (org.type === "nucleus") continue;
+
+        const orgColorObj = new THREE.Color().setHSL(((this.hue + (i * 25)) % 360) / 360, 0.95, 0.65);
+        const orgMat = new THREE.MeshStandardMaterial({
+          color: orgColorObj,
+          emissive: orgColorObj,
+          emissiveIntensity: 0.5,
+          roughness: 0.3,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false
+        });
+        const orgMesh = new THREE.Mesh(organelleGeo, orgMat);
+        this.organelleMeshes.push({
+          mesh: orgMesh,
+          material: orgMat,
+          org: org
+        });
+        this.threeGroup.add(orgMesh);
+      }
+    }
+
+    this.updateThreeMesh();
   }
 
   get mass() {
@@ -63,7 +174,6 @@ export class Cell {
   }
 
   get maxSpeed() {
-    // Rebalanced mass-speed tradeoff: gentle scaling keeps massive cells agile and fun
     const refRadius = 26;
     const ratio = refRadius / Math.max(16, this.radius);
     return Math.max(1.6, this.baseMaxSpeed * Math.pow(ratio, 0.16));
@@ -71,31 +181,23 @@ export class Cell {
 
   generateOrganelles() {
     const list = [];
-    // 1. Central / Eccentric Nucleus
     list.push({
       type: "nucleus",
       distRatio: randomRange(0.1, 0.25),
       angleOffset: Math.random() * Math.PI * 2,
       radiusRatio: randomRange(0.32, 0.44),
-      rotationSpeed: randomRange(-0.008, 0.008),
-      chromatinNodes: [
-        { angle: 0.5, dist: 0.4, r: 0.25 },
-        { angle: 2.2, dist: 0.5, r: 0.2 },
-        { angle: 4.1, dist: 0.35, r: 0.28 }
-      ]
+      rotationSpeed: randomRange(-0.008, 0.008)
     });
 
-    // 2. Mitochondria & Vacuoles
-    const count = Math.floor(randomRange(2, 5));
+    const count = Math.floor(randomRange(2, 4));
     for (let i = 0; i < count; i++) {
       list.push({
         type: Math.random() > 0.4 ? "mitochondria" : "vacuole",
-        distRatio: randomRange(0.45, 0.72),
+        distRatio: randomRange(0.42, 0.68),
         angleOffset: (i * (Math.PI * 2 / count)) + randomRange(-0.3, 0.3),
-        sizeRatio: randomRange(0.12, 0.22),
-        aspect: randomRange(1.4, 2.4),
-        orbitSpeed: randomRange(-0.006, 0.006),
-        color: hsla((this.hue + randomRange(-15, 15) + 360) % 360, 85, 70, 0.55)
+        sizeRatio: randomRange(0.14, 0.22),
+        aspect: randomRange(1.4, 2.2),
+        orbitSpeed: randomRange(-0.008, 0.008)
       });
     }
 
@@ -107,15 +209,13 @@ export class Cell {
   }
 
   eat(otherCell) {
-    // Mass conservation: Add area of eaten cell with slight metabolic loss
     const currentArea = Math.PI * this.targetRadius * this.targetRadius;
     const preyArea = Math.PI * otherCell.radius * otherCell.radius;
     const newArea = currentArea + preyArea * 0.88;
     this.targetRadius = Math.sqrt(newArea / Math.PI);
 
-    // Visual juice on consumption
-    this.flashTimer = 18; // Frames of bioluminescent flash
-    this.elasticBounce = 0.25; // Elastic gelatinous expansion spike
+    this.flashTimer = 18;
+    this.elasticBounce = 0.28;
   }
 
   loseMassPercent(percent) {
@@ -128,7 +228,7 @@ export class Cell {
   }
 
   update(dt = 1) {
-    // 1. Viscous fluid physics integration
+    // 1. Viscous fluid physics integration (2D Plane)
     this.vel.add(this.acc);
     const speedCap = (this.dashGlowTimer && this.dashGlowTimer > 0)
       ? this.maxSpeed * 2.8
@@ -163,9 +263,110 @@ export class Cell {
     const targetStretch = 1 + Math.min(0.35, speedRatio * 0.25);
     this.squishFactor = lerp(this.squishFactor, targetSquish, 0.1);
     this.stretchFactor = lerp(this.stretchFactor, targetStretch, 0.1);
+
+    // 6. Synchronize 3D Three.js Object
+    this.updateThreeMesh();
   }
 
+  updateThreeMesh() {
+    if (!this.threeGroup) return;
+
+    // Position in 3D world (Z=0 plane)
+    this.threeGroup.position.set(this.pos.x, this.pos.y, 0);
+
+    // Orientation along movement heading
+    if (this.vel.magSq() > 0.01) {
+      this.threeGroup.rotation.z = this.vel.heading();
+    }
+
+    // Breathing & gelatinous oscillation
+    const breathing = Math.sin(this.membranePhase * 0.8) * 0.035;
+    const effectiveRadius = this.radius * (1 + this.elasticBounce + breathing);
+
+    // 3D Volume-preserving squish & stretch:
+    // Stretch along X (heading), squish along Y, compensate along Z
+    const scaleX = effectiveRadius * this.stretchFactor;
+    const scaleY = effectiveRadius * this.squishFactor;
+    const scaleZ = effectiveRadius * (1 / Math.sqrt(Math.max(0.2, this.stretchFactor * this.squishFactor)));
+
+    if (this.membraneMesh) {
+      this.membraneMesh.scale.set(scaleX, scaleY, scaleZ);
+
+      // Flashing emissive feedback
+      if (this.flashTimer > 0) {
+        this.membraneMaterial.emissiveIntensity = 2.0;
+        if (this.flashColor) {
+          this.membraneMaterial.emissive.setStyle(this.flashColor);
+        } else {
+          this.membraneMaterial.emissive.setHex(0xffffff);
+        }
+      } else {
+        this.membraneMaterial.emissiveIntensity = 0.35;
+        this.membraneMaterial.emissive.setHex(this.glowColorHex || 0x39ff14);
+      }
+    }
+
+    // Nucleus sizing & positioning
+    if (this.nucleusMesh) {
+      const nRadius = effectiveRadius * 0.36;
+      this.nucleusMesh.scale.set(nRadius, nRadius, nRadius);
+      this.nucleusMesh.position.set(
+        Math.cos(this.organelleAngle) * (effectiveRadius * 0.12),
+        Math.sin(this.organelleAngle) * (effectiveRadius * 0.12),
+        1
+      );
+    }
+
+    // Organelles orbiting inside cell
+    for (let i = 0; i < this.organelleMeshes.length; i++) {
+      const item = this.organelleMeshes[i];
+      const org = item.org;
+      const angle = org.angleOffset + this.organelleAngle;
+      const dist = effectiveRadius * org.distRatio;
+      const oRadius = effectiveRadius * org.sizeRatio;
+
+      item.mesh.position.set(
+        Math.cos(angle) * dist,
+        Math.sin(angle) * dist,
+        0.5
+      );
+      item.mesh.scale.set(
+        oRadius * (org.aspect || 1.2),
+        oRadius,
+        oRadius
+      );
+    }
+  }
+
+  destroy(scene) {
+    if (!this.threeGroup) return;
+
+    if (scene) {
+      scene.remove(this.threeGroup);
+    }
+
+    if (this.membraneMaterial) {
+      this.membraneMaterial.dispose();
+      this.membraneMaterial = null;
+    }
+    if (this.nucleusMaterial) {
+      this.nucleusMaterial.dispose();
+      this.nucleusMaterial = null;
+    }
+    for (let i = 0; i < this.organelleMeshes.length; i++) {
+      if (this.organelleMeshes[i].material) {
+        this.organelleMeshes[i].material.dispose();
+      }
+    }
+    this.organelleMeshes = [];
+    this.threeGroup = null;
+    this.membraneMesh = null;
+    this.nucleusMesh = null;
+  }
+
+  // Fallback 2D Canvas methods for backward compatibility
   buildMembranePath(ctx) {
+    if (!ctx) return;
     const num = this.numVertices;
     const vX = Cell.vX;
     const vY = Cell.vY;
@@ -203,153 +404,19 @@ export class Cell {
     ctx.closePath();
   }
 
-  getMembraneVertices() {
-    // Retained for backward-compatibility
-    const vertices = [];
-    const effectiveRadius = this.radius * (1 + this.elasticBounce);
-    const heading = this.vel.magSq() > 0.01 ? this.vel.heading() : 0;
-
-    for (let i = 0; i < this.numVertices; i++) {
-      const angle = (i / this.numVertices) * Math.PI * 2;
-      const wave1 = Math.sin(angle * this.waveFreq1 + this.membranePhase) * this.waveAmp1;
-      const wave2 = Math.cos(angle * this.waveFreq2 - this.membranePhase * 1.3) * this.waveAmp2;
-      const breathing = Math.sin(this.membranePhase * 0.8) * 0.02;
-      const relAngle = angle - heading;
-      const velocitySquash = (Math.cos(relAngle) * (this.stretchFactor - 1)) +
-                             (Math.abs(Math.sin(relAngle)) * (this.squishFactor - 1));
-
-      const r = effectiveRadius * (1 + wave1 + wave2 + breathing + velocitySquash);
-      vertices.push({
-        x: Math.cos(angle) * r,
-        y: Math.sin(angle) * r,
-        angle: angle,
-        r: r
-      });
-    }
-    return vertices;
-  }
-
   render(ctx) {
+    if (!ctx) return;
     ctx.save();
     ctx.translate(this.pos.x, this.pos.y);
-
-    // 1. Bioluminescent Glow Halo (Optimized: disabled for tiny plankton, capped for others)
-    const isFlashing = this.flashTimer > 0;
-    if (isFlashing) {
-      ctx.shadowBlur = 24;
-      ctx.shadowColor = this.flashColor || "#ffffff";
-    } else if (this.radius >= 18) {
-      ctx.shadowBlur = Math.min(14, this.radius * 0.35);
-      ctx.shadowColor = this.glowColor;
-    } else {
-      ctx.shadowBlur = 0;
-    }
-
-    // 2. Build Organic Spline Membrane Path (zero object allocations)
     this.buildMembranePath(ctx);
-
-    // 3. Translucent Cytoplasm Shading with Multi-Stop Radial Gradient
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius * 1.1);
-    if (isFlashing) {
-      if (this.flashColor) {
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-        grad.addColorStop(0.5, this.flashColor);
-        grad.addColorStop(1, this.flashColor);
-      } else {
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-        grad.addColorStop(0.5, hsla(this.hue, 100, 85, 0.8));
-        grad.addColorStop(1, hsla(this.hue, 100, 70, 0.9));
-      }
-    } else {
-      grad.addColorStop(0, hsla(this.hue, this.saturation, 70, 0.45));
-      grad.addColorStop(0.4, hsla(this.hue, this.saturation, 55, 0.35));
-      grad.addColorStop(0.85, hsla(this.hue, this.saturation, 45, 0.6));
-      grad.addColorStop(1, hsla(this.hue, 100, 65, 0.85));
-    }
-
-    ctx.fillStyle = grad;
+    ctx.fillStyle = this.baseColor;
     ctx.fill();
-
-    // 4. Outer Membrane Wall Stroke
-    ctx.lineWidth = Math.max(1.8, Math.min(4.5, this.radius * 0.08));
-    ctx.strokeStyle = isFlashing ? (this.flashColor || "#ffffff") : hsla(this.hue, 100, 75, 0.9);
-    ctx.stroke();
-    ctx.shadowBlur = 0; // Clear blur immediately to protect subsequent draws
-
-    // 5. Internal Organelles (Nucleus & floating structures)
-    this.renderOrganelles(ctx);
-
-    ctx.restore();
-  }
-
-  renderOrganelles(ctx) {
-    // LOD: Plankton (radius < 16) only need a simple, fast nucleus dot
-    if (this.radius < 16) {
-      ctx.fillStyle = hsla((this.hue + 25) % 360, 95, 80, 0.7);
-      ctx.beginPath();
-      ctx.arc(0, 0, this.radius * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-
-    ctx.save();
-    ctx.rotate(this.organelleAngle);
-
-    for (let i = 0; i < this.organelles.length; i++) {
-      const org = this.organelles[i];
-      const dist = this.radius * org.distRatio;
-      const x = Math.cos(org.angleOffset) * dist;
-      const y = Math.sin(org.angleOffset) * dist;
-
-      if (org.type === "nucleus") {
-        const nRadius = this.radius * org.radiusRatio;
-
-        // Nucleus outer aura
-        ctx.fillStyle = hsla((this.hue + 15) % 360, 90, 65, 0.4);
-        ctx.beginPath();
-        ctx.arc(x, y, nRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = hsla((this.hue + 30) % 360, 100, 80, 0.75);
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Dense Nucleolus center
-        ctx.fillStyle = hsla((this.hue + 45) % 360, 100, 90, 0.85);
-        ctx.beginPath();
-        ctx.arc(x, y, nRadius * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Chromatin spots
-        const nodes = org.chromatinNodes;
-        for (let j = 0; j < nodes.length; j++) {
-          const node = nodes[j];
-          const nx = x + Math.cos(node.angle) * (nRadius * node.dist);
-          const ny = y + Math.sin(node.angle) * (nRadius * node.dist);
-          ctx.fillStyle = hsla(this.hue, 100, 95, 0.7);
-          ctx.beginPath();
-          ctx.arc(nx, ny, nRadius * node.r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else if (org.type === "mitochondria") {
-        const mSize = this.radius * org.sizeRatio;
-        ctx.fillStyle = org.color;
-        ctx.beginPath();
-        ctx.ellipse(x, y, mSize * org.aspect, mSize, org.angleOffset * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (org.type === "vacuole") {
-        const vRadius = this.radius * org.sizeRatio;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
-        ctx.beginPath();
-        ctx.arc(x, y, vRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
     ctx.restore();
   }
 }
 
-// Pre-allocated static arrays for zero-garbage membrane generation
 Cell.vX = new Float32Array(64);
 Cell.vY = new Float32Array(64);
+Cell._outerGeo = null;
+Cell._nucleusGeo = null;
+Cell._organelleGeo = null;

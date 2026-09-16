@@ -1,7 +1,7 @@
 /**
- * Omnivore - Core Game Engine
- * Orchestrates game state, entity lifecycles, collision detection,
- * spatial optimization, input processing, and HUD synchronization.
+ * Omnivore - Core Game Engine (Three.js 3D Microcosmic Simulation)
+ * Orchestrates Three.js WebGL rendering, 2D physics plane invariance,
+ * entity lifecycles, collision detection, and HUD synchronization.
  */
 
 import { Player } from "./player.js";
@@ -41,17 +41,41 @@ function safeSetStorage(key, value) {
 export class Game {
   constructor(canvas, uiElements) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
     this.ui = uiElements;
 
-    // Simulation World Bounds
+    // 2D Text Overlay Canvas for pixel-crisp HUD indicator floating text
+    this.textCanvas = document.getElementById("text-canvas");
+    this.textCtx = this.textCanvas ? this.textCanvas.getContext("2d") : null;
+
+    // Simulation World Bounds & Capacity
     this.worldRadius = 3500;
-    this.maxCells = 200;
+    this.maxCells = 180;
+
+    // Three.js WebGL Engine Initialization
+    const THREE = window.THREE;
+    if (THREE) {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: this.canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance"
+      });
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+      this.scene = new THREE.Scene();
+    } else {
+      this.renderer = null;
+      this.scene = null;
+    }
 
     // Core Systems
     this.camera = new Camera(canvas.width, canvas.height);
     this.background = new BackgroundSystem(this.worldRadius);
+    if (this.scene) this.background.initThreeScene(this.scene);
+
     this.particles = new ParticleManager();
+    if (this.scene) this.particles.initThreeScene(this.scene);
+
     this.sound = new SoundSystem();
 
     // Game State
@@ -82,9 +106,13 @@ export class Game {
 
   bindEvents() {
     window.addEventListener("resize", () => this.resize());
-    window.addEventListener("scroll", () => {
-      this.canvasRect = this.canvas.getBoundingClientRect();
-    }, { passive: true });
+    window.addEventListener(
+      "scroll",
+      () => {
+        this.canvasRect = this.canvas.getBoundingClientRect();
+      },
+      { passive: true }
+    );
 
     window.addEventListener("mousemove", (e) => {
       const rect = this.canvasRect || this.canvas.getBoundingClientRect();
@@ -92,8 +120,8 @@ export class Game {
     });
 
     window.addEventListener("mousedown", (e) => {
-      if (e.button === 0) { // Left click
-        this.sound.init(); // Audio context resume on first interaction
+      if (e.button === 0) {
+        this.sound.init();
         if (this.state === GAME_STATES.PLAYING) {
           this.triggerPlayerDash();
         }
@@ -116,12 +144,10 @@ export class Game {
     window.addEventListener(
       "touchstart",
       (e) => {
-        // Do not block interaction with UI buttons and modals
         if (e.target && (e.target.closest("button") || e.target.closest(".screen-card"))) {
           return;
         }
 
-        // Prevent mobile browser zooming and pull-down reload
         e.preventDefault();
         this.sound.init();
 
@@ -130,7 +156,6 @@ export class Game {
           const touchX = e.touches[0].clientX - rect.left;
           const touchY = e.touches[0].clientY - rect.top;
 
-          // Touch and drag ONLY steers the cell
           this.mouseScreen.set(touchX, touchY);
 
           // Double-tap detection for Dash
@@ -139,7 +164,6 @@ export class Game {
           const distDiff = Math.hypot(touchX - this.lastTapPos.x, touchY - this.lastTapPos.y);
 
           if (timeDiff < 300 && distDiff < 50) {
-            // Double-tap confirmed: execute dash!
             if (this.state === GAME_STATES.PLAYING) {
               this.triggerPlayerDash();
             }
@@ -160,7 +184,6 @@ export class Game {
           return;
         }
 
-        // Prevent default mobile gesture scrolling
         e.preventDefault();
 
         if (e.touches.length > 0) {
@@ -213,10 +236,23 @@ export class Game {
   }
 
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    this.canvas.width = w;
+    this.canvas.height = h;
+
+    if (this.textCanvas) {
+      this.textCanvas.width = w;
+      this.textCanvas.height = h;
+    }
+
     this.canvasRect = this.canvas.getBoundingClientRect();
-    this.camera.resize(this.canvas.width, this.canvas.height);
+    this.camera.resize(w, h);
+
+    if (this.renderer) {
+      this.renderer.setSize(w, h, false);
+    }
   }
 
   toggleAudio() {
@@ -252,8 +288,21 @@ export class Game {
     this.startTime = performance.now();
     this.timeSurvived = 0;
 
+    // Clean up existing cells in Three.js scene
+    if (this.player) {
+      this.player.destroy(this.scene);
+    }
+    for (let i = 0; i < this.aiCells.length; i++) {
+      this.aiCells[i].destroy(this.scene);
+    }
+    this.aiCells = [];
+
     // Reset Player at origin
     this.player = new Player(0, 0, 26);
+    if (this.player.threeGroup && this.scene) {
+      this.scene.add(this.player.threeGroup);
+    }
+
     this.camera.pos.set(0, 0);
     this.camera.zoom = 1.0;
 
@@ -261,7 +310,6 @@ export class Game {
     this.particles.clear();
 
     // Populate Initial Ecosystem
-    this.aiCells = [];
     this.populateInitialEcosystem();
 
     // Switch State & update UI overlays
@@ -289,7 +337,6 @@ export class Game {
       const x = Math.cos(angle) * dist;
       const y = Math.sin(angle) * dist;
 
-      // If offscreenOnly, ensure it's outside camera view
       if (offscreenOnly && this.camera.isVisible(x, y, 80)) {
         continue;
       }
@@ -316,12 +363,14 @@ export class Game {
       radius = randomRange(13, 20);
     } else {
       type = CELL_TYPES.PREDATOR;
-      // Apex predators can be significantly larger than starting player
       const playerRefR = this.player ? this.player.radius : 26;
       radius = randomRange(playerRefR * 0.95, playerRefR * 2.3);
     }
 
     const cell = new AICell(pos.x, pos.y, radius, type);
+    if (cell.threeGroup && this.scene) {
+      this.scene.add(cell.threeGroup);
+    }
     this.aiCells.push(cell);
   }
 
@@ -330,7 +379,6 @@ export class Game {
 
     const dashResult = this.player.dash();
     if (dashResult) {
-      // Eject glowing mass behind cell
       this.particles.createDashTrail(
         dashResult.ejectX,
         dashResult.ejectY,
@@ -339,11 +387,9 @@ export class Game {
         this.player.radius
       );
 
-      // Sound & Screen Shake
       this.sound.playDash();
       this.camera.addShake(4);
 
-      // Floating text
       this.particles.addFloatingText(
         this.player.pos.x,
         this.player.pos.y - this.player.radius - 12,
@@ -354,68 +400,52 @@ export class Game {
     }
   }
 
-  update(dt) {
-    // Keep ambient abyss background animated at all times
-    this.background.update(dt);
-
+  update(dt = 1) {
     if (this.state !== GAME_STATES.PLAYING) return;
 
-    // Update Survival Time
+    // Survival timing
     this.timeSurvived = Math.floor((performance.now() - this.startTime) / 1000);
 
-    // 1. Update Camera Mouse World Position
+    // 1. Raycast screen pointer to 2D world coordinates on Z=0 plane
     const worldMouse = this.camera.screenToWorld(this.mouseScreen.x, this.mouseScreen.y);
-    this.player.setTarget(worldMouse.x, worldMouse.y);
-
-    // 2. Dynamic Arena Growth: As player grows, smoothly expand world pool
-    const baseWorldRadius = 3500;
-    const targetWorldRadius = baseWorldRadius + Math.max(0, (this.player.targetRadius - 26) * 45);
-    this.worldRadius = lerp(this.worldRadius, targetWorldRadius, 0.03);
-    this.background.worldRadius = this.worldRadius;
-
-    // 3. Update Player & Enforce Hard Boundary Clamping
-    const hitBoundary = this.player.update(dt, this.worldRadius);
-    if (hitBoundary) {
-      this.sound.playBounce();
-      this.camera.addShake(4);
-      this.particles.createDashTrail(
-        this.player.pos.x,
-        this.player.pos.y,
-        this.player.pos.heading() + Math.PI,
-        "#39ff14",
-        this.player.radius * 0.7
-      );
+    if (this.player && !this.player.isDead) {
+      this.player.setTarget(worldMouse.x, worldMouse.y);
+      const hitBoundary = this.player.update(dt, this.worldRadius);
+      if (hitBoundary) {
+        this.camera.addShake(2.5);
+      }
     }
 
-    // 4. Update Camera tracking centered on player
-    this.camera.update(this.player, dt);
-
-    // 5. Update AI Cells & Food Web
-    // Cull and maintain population
-    while (this.aiCells.length < this.maxCells) {
-      this.spawnRandomCell(true);
-    }
-
+    // 2. Update AI cells (Sensory decisions and physical motion)
     for (let i = 0; i < this.aiCells.length; i++) {
       const cell = this.aiCells[i];
+      if (cell.isDead) continue;
       cell.updateAI(this.aiCells, this.player, this.worldRadius);
       cell.update(dt);
     }
 
-    // 6. Collision Resolution (Player vs AI and AI vs AI)
+    // 3. Resolve Collisions (2D physical plane)
     this.resolveCollisions();
 
-    // 7. Cleanup Dead Cells
+    // 4. Clean up dead cells from scene and replenish ecosystem
     for (let i = this.aiCells.length - 1; i >= 0; i--) {
-      if (this.aiCells[i].isDead) {
+      const cell = this.aiCells[i];
+      if (cell.isDead) {
+        cell.destroy(this.scene);
         this.aiCells.splice(i, 1);
       }
     }
 
-    // 8. Update Particles
-    this.particles.update(dt);
+    while (this.aiCells.length < this.maxCells) {
+      this.spawnRandomCell(true);
+    }
 
-    // 9. Update HUD UI
+    // 5. Update Camera, Particles, and Background
+    this.camera.update(this.player, dt);
+    this.particles.update(dt);
+    this.background.update(dt, this.camera.pos.x, this.camera.pos.y);
+
+    // 6. Sync UI HUD
     this.updateHUD();
   }
 
@@ -425,7 +455,7 @@ export class Game {
     const pPos = this.player.pos;
     const pR = this.player.radius;
 
-    // Player vs AI: Fast AABB rejection + squared distance checks
+    // Player vs AI
     for (let i = 0; i < this.aiCells.length; i++) {
       const cell = this.aiCells[i];
       if (cell.isDead) continue;
@@ -441,20 +471,16 @@ export class Game {
       const dist = Math.sqrt(distSq);
 
       if (dist < eatDistance) {
-        // Special Case: RED PARASITE leech attack!
+        // Red parasite attack
         if (cell.type === CELL_TYPES.PARASITE) {
-          // Drain 8% of player's mass (does NOT trigger Game Over)
           this.player.loseMassPercent(0.08);
 
-          // Flash player in toxic blood red
           this.player.flashTimer = 18;
           this.player.flashColor = "#f43f5e";
 
-          // Sound, Screen Shake
           this.sound.playLeech();
           this.camera.addShake(7);
 
-          // Forcefully bounce parasite away to prevent continuous frame leeching
           const knockDir = Vector2D.sub(cell.pos, pPos);
           if (knockDir.magSq() < 0.1) knockDir.set(Math.random() - 0.5, Math.random() - 0.5);
           knockDir.normalize();
@@ -465,12 +491,10 @@ export class Game {
             pPos.y + knockDir.y * (pR + cell.radius + 32)
           );
 
-          // Blood red juice particles at contact point
           const midX = (pPos.x + cell.pos.x) / 2;
           const midY = (pPos.y + cell.pos.y) / 2;
           this.particles.createEatBurst(midX, midY, "#f43f5e", 22, 14);
 
-          // Floating indicator text
           this.particles.addFloatingText(
             pPos.x,
             pPos.y - pR - 16,
@@ -481,19 +505,17 @@ export class Game {
           continue;
         }
 
-        // Player is larger: EAT!
+        // Player absorbs smaller cell
         if (pR > cell.radius * 1.05) {
           const eatenMass = Math.round(cell.mass);
           this.player.eat(cell);
           cell.isDead = true;
 
-          // Sound, Juice, Shake
           const pitch = Math.max(0.6, Math.min(1.8, 40 / cell.radius));
           this.sound.playEat(pitch);
           this.particles.createEatBurst(cell.pos.x, cell.pos.y, cell.glowColor, 18, cell.radius);
           this.camera.addShake(Math.min(9, cell.radius * 0.22));
 
-          // Metrics
           this.cellsEaten++;
           this.score += eatenMass;
           if (this.score > this.highScore) {
@@ -501,7 +523,6 @@ export class Game {
             safeSetStorage("omnivore_high_score", this.highScore.toString());
           }
 
-          // Floating score text
           this.particles.addFloatingText(
             cell.pos.x,
             cell.pos.y,
@@ -510,7 +531,7 @@ export class Game {
             Math.max(14, Math.min(24, Math.round(cell.radius * 0.55)))
           );
         }
-        // Player is smaller: GAME OVER!
+        // Larger predator consumes player
         else if (cell.radius > pR * 1.05) {
           this.handleGameOver(cell);
           return;
@@ -518,7 +539,7 @@ export class Game {
       }
     }
 
-    // AI vs AI collisions (Only predators can eat, and only cells near player)
+    // AI vs AI collisions
     const simRadius = 1600;
     const simRadiusSq = simRadius * simRadius;
     for (let i = 0; i < this.aiCells.length; i++) {
@@ -535,7 +556,6 @@ export class Game {
         const cellB = this.aiCells[j];
         if (cellB.isDead) continue;
 
-        // In ecological food web, only PREDATOR hunts other AI cells
         if (cellA.type !== CELL_TYPES.PREDATOR && cellB.type !== CELL_TYPES.PREDATOR) continue;
 
         const pBdx = cellB.pos.x - pPos.x;
@@ -559,7 +579,7 @@ export class Game {
             cellB.eat(cellA);
             cellA.isDead = true;
             this.particles.createEatBurst(cellA.pos.x, cellA.pos.y, cellA.glowColor, 10, cellA.radius);
-            break; // cellA died, can no longer interact with remaining cells
+            break;
           }
         }
       }
@@ -570,12 +590,10 @@ export class Game {
     this.player.isDead = true;
     this.state = GAME_STATES.GAME_OVER;
 
-    // Big death impact
     this.sound.playDeath();
     this.camera.addShake(18);
     this.particles.createEatBurst(this.player.pos.x, this.player.pos.y, "#39ff14", 36, this.player.radius * 1.4);
 
-    // Show Game Over Modal
     if (this.ui.gameOverScreen) {
       setTimeout(() => {
         this.ui.gameOverScreen.classList.remove("hidden");
@@ -619,37 +637,28 @@ export class Game {
   }
 
   render() {
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    // 1. Clear 2D Text Overlay Canvas
+    if (this.textCtx) {
+      this.textCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
 
-    // 1. Clear & Render Parallax Abyss Background
-    this.background.render(ctx, this.camera, w, h);
-
-    // 2. World Space Rendering
-    ctx.save();
-    this.camera.applyTransform(ctx);
-
-    // Render fluid coordinate grid & world boundary
-    this.background.renderWorldGrid(ctx, this.camera, w, h);
-
-    // Render Particles beneath cells (shockwaves)
-    this.particles.render(ctx, this.camera);
-
-    // Render AI Cells (Frustum Culled)
+    // 2. Frustum Culling for AI Cells to maintain 60 FPS
     for (let i = 0; i < this.aiCells.length; i++) {
       const cell = this.aiCells[i];
-      if (!cell.isDead && this.camera.isVisible(cell.pos.x, cell.pos.y, cell.radius * 2)) {
-        cell.render(ctx);
+      if (cell.threeGroup) {
+        cell.threeGroup.visible = !cell.isDead && this.camera.isVisible(cell.pos.x, cell.pos.y, cell.radius * 2);
       }
     }
 
-    // Render Player
-    if (this.player && !this.player.isDead) {
-      this.player.render(ctx);
+    // 3. Render 3D Scene with Three.js WebGLRenderer
+    if (this.renderer && this.scene && this.camera.threeCamera) {
+      this.renderer.render(this.scene, this.camera.threeCamera);
     }
 
-    ctx.restore();
+    // 4. Render 2D Floating Score and Combat Feedback Text
+    if (this.textCtx) {
+      this.particles.renderText(this.textCtx, this.camera);
+    }
   }
 
   loop(timestamp) {
@@ -658,7 +667,6 @@ export class Game {
       const elapsed = timestamp - this.lastTimestamp;
       this.lastTimestamp = timestamp;
 
-      // Normalizing dt around 60fps (dt = 1 at 16.6ms), capped to prevent spiraling
       const dt = Math.min(2.5, elapsed / 16.67);
 
       this.update(dt);

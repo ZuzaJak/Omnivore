@@ -1,7 +1,7 @@
 /**
- * Omnivore - AI Biological Organism Class
- * Subclasses Cell. Implements sensory detection, predator hunting,
- * prey fleeing, and ambient plankton drifting behaviors.
+ * Omnivore - AI Biological Organism Class (3D Three.js Predator, Prey & Parasites)
+ * Subclasses Cell. Implements sensory detection, predator hunting with purple PointLights,
+ * crimson parasite swarming, prey fleeing, and ambient plankton drifting.
  */
 
 import { Cell } from "./cell.js";
@@ -16,7 +16,6 @@ export const CELL_TYPES = {
 
 export class AICell extends Cell {
   constructor(x, y, radius, type = CELL_TYPES.PREY) {
-    // Generate distinct bioluminescent themes based on ecological role
     let hue, saturation, lightness, baseMaxSpeed;
 
     if (type === CELL_TYPES.PLANKTON) {
@@ -25,20 +24,18 @@ export class AICell extends Cell {
       lightness = 60;
       baseMaxSpeed = 1.4;
     } else if (type === CELL_TYPES.PREY) {
-      // Dynamic mix of toxic neon green and bioluminescent alien violet
-      hue = randomChoice([115, 130, 265, 285]); 
+      hue = randomChoice([115, 130, 265, 285]); // Green & violet
       saturation = 95;
       lightness = 55;
       baseMaxSpeed = 2.8;
     } else if (type === CELL_TYPES.PARASITE) {
-      // Crimson / Blood Red swarm parasite (Hue ~350-10)
-      hue = randomChoice([345, 355, 2, 12]);
+      hue = randomChoice([345, 355, 2, 12]); // Crimson / Blood Red
       saturation = 100;
       lightness = 52;
       baseMaxSpeed = 3.6;
     } else {
-      // PREDATOR: Deep glowing alien purple / violet (~280)
-      hue = randomChoice([275, 280, 288, 295]); 
+      // PREDATOR: Deep glowing alien purple / violet
+      hue = randomChoice([275, 280, 288, 295]);
       saturation = 100;
       lightness = 50;
       baseMaxSpeed = 2.6;
@@ -62,6 +59,37 @@ export class AICell extends Cell {
     // AI decision tick timer to optimize CPU
     this.decisionTimer = Math.floor(Math.random() * 10);
     this.decisionInterval = 6;
+
+    // 3D Three.js Predator Bioluminescent Light
+    this.pointLight = null;
+    this.initAIThreeObject();
+  }
+
+  initAIThreeObject() {
+    const THREE = window.THREE;
+    if (!THREE || !this.threeGroup) return;
+
+    if (this.type === CELL_TYPES.PREDATOR) {
+      // Predators emit an ominous, deep purple bioluminescent light
+      this.pointLight = new THREE.PointLight(0xa855f7, 1.8, 550, 2);
+      this.pointLight.position.set(0, 0, 20);
+      this.threeGroup.add(this.pointLight);
+    } else if (this.type === CELL_TYPES.PARASITE) {
+      // Parasites pulse with aggressive blood-red emissive glow
+      if (this.membraneMaterial) {
+        this.membraneMaterial.emissiveIntensity = 0.65;
+        this.membraneMaterial.roughness = 0.2;
+      }
+    }
+  }
+
+  update(dt = 1) {
+    super.update(dt);
+
+    // Dynamically adjust predator point light radius as it grows
+    if (this.pointLight && this.type === CELL_TYPES.PREDATOR) {
+      this.pointLight.distance = 450 + this.radius * 2.5;
+    }
   }
 
   updateAI(neighbors, player, worldRadius = 3500) {
@@ -69,9 +97,16 @@ export class AICell extends Cell {
     if (this.decisionTimer < this.decisionInterval) return;
     this.decisionTimer = 0;
 
+    // Culling light for distant predators to maximize 60 FPS
+    if (this.pointLight && player) {
+      const dx = this.pos.x - player.pos.x;
+      const dy = this.pos.y - player.pos.y;
+      this.pointLight.visible = (dx * dx + dy * dy < 2200 * 2200);
+    }
+
     let steerForce = new Vector2D(0, 0);
 
-    // 1. World boundary soft constraint (avoid Math.hypot when within arena)
+    // 1. World boundary soft constraint
     const originDistSq = this.pos.magSq();
     const boundRadius = worldRadius * 0.85;
     if (originDistSq > boundRadius * boundRadius) {
@@ -100,7 +135,6 @@ export class AICell extends Cell {
             const dist = Math.sqrt(dSq) || 1;
             const toPlayerX = dx / dist;
             const toPlayerY = dy / dist;
-            // Add organic twitchy swarm jitter
             const jitterAngle = Math.random() * Math.PI * 2;
             const jitterX = Math.cos(jitterAngle) * 0.35;
             const jitterY = Math.sin(jitterAngle) * 0.35;
@@ -112,7 +146,6 @@ export class AICell extends Cell {
           }
         }
       }
-      // Out of range: Rapid search wander
       this.wanderAngle += (Math.random() - 0.5) * 0.45;
       const wander = Vector2D.fromAngle(this.wanderAngle, 0.22);
       this.applyForce(wander);
@@ -158,15 +191,12 @@ export class AICell extends Cell {
       const dSq = dx * dx + dy * dy;
       if (dSq > maxReach * maxReach) continue;
 
-      // Is other cell dangerous to us?
       if (other.radius > this.radius * 1.06) {
         if (dSq < closestThreatDistSq) {
           closestThreat = other;
           closestThreatDistSq = dSq;
         }
-      }
-      // Is other cell edible for us?
-      else if (this.radius > other.radius * 1.06 && (this.type === CELL_TYPES.PREDATOR || other.type === CELL_TYPES.PLANKTON)) {
+      } else if (this.radius > other.radius * 1.06 && (this.type === CELL_TYPES.PREDATOR || other.type === CELL_TYPES.PLANKTON)) {
         if (dSq < closestFoodDistSq) {
           closestFood = other;
           closestFoodDistSq = dSq;
@@ -175,25 +205,28 @@ export class AICell extends Cell {
     }
 
     // 5. Behavioral execution
-    // Priority A: Flee from predators
     if (closestThreat) {
       const fleeVec = Vector2D.sub(this.pos, closestThreat.pos).normalize();
       const closestThreatDist = Math.sqrt(closestThreatDistSq);
       const urgency = clamp(1 - (closestThreatDist / this.sensorRadius), 0.3, 1.0);
       steerForce.add(fleeVec.mult(0.36 * urgency));
-    }
-    // Priority B: Hunt edible prey
-    else if (closestFood) {
+    } else if (closestFood) {
       const huntVec = Vector2D.sub(closestFood.pos, this.pos).normalize();
       steerForce.add(huntVec.mult(0.24));
-    }
-    // Priority C: Ambient fluid wandering
-    else {
+    } else {
       this.wanderAngle += (Math.random() - 0.5) * this.wanderChangeSpeed * 5;
       const wander = Vector2D.fromAngle(this.wanderAngle, 0.12);
       steerForce.add(wander);
     }
 
     this.applyForce(steerForce);
+  }
+
+  destroy(scene) {
+    if (this.pointLight && this.threeGroup) {
+      this.threeGroup.remove(this.pointLight);
+      this.pointLight = null;
+    }
+    super.destroy(scene);
   }
 }

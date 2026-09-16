@@ -1,323 +1,470 @@
 /**
- * Omnivore - Atmospheric Parallax Background System
- * Renders 3 parallax layers (far nebula orbs, mid spores, near marine snow)
- * and an undulating, liquid-refracted fluid grid with deep alien violet vignette.
+ * Omnivore - Atmospheric 3D Parallax Background System (Three.js Microcosm)
+ * Renders 3 true 3D negative-Z parallax layers (far nebula orbs, mid spores, near marine snow),
+ * liquid-refracted fluid coordinate grid, and glowing world boundary barrier rings.
  */
 
 import { Vector2D, randomRange, hsla } from "./math.js";
+
+function createCircleTexture() {
+  const THREE = window.THREE;
+  if (!THREE) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+
+  const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(255, 255, 255, 1.0)");
+  grad.addColorStop(0.25, "rgba(255, 255, 255, 0.85)");
+  grad.addColorStop(0.65, "rgba(255, 255, 255, 0.25)");
+  grad.addColorStop(1.0, "rgba(255, 255, 255, 0.0)");
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
 
 export class BackgroundSystem {
   constructor(worldRadius = 3500) {
     this.worldRadius = worldRadius;
 
-    // Layer 1: Far, massive out-of-focus nebula orbs (speed factor ~0.12)
-    this.farBokeh = this.createBokehOrbs(50, 50, 130, 0.08, 0.22);
+    // Three.js Systems
+    this.circleTexture = createCircleTexture();
 
-    // Layer 2: Mid-depth drifting alien spores & vacuoles (speed factor ~0.35)
-    this.midSpores = this.createMidSpores(90, 10, 28, 0.15, 0.35);
+    // 3D Parallax Layer Objects
+    this.farBokehData = [];
+    this.farBokehPoints = null;
 
-    // Layer 3: Near-depth marine snow & bioluminescent plankton motes (speed factor ~0.60)
-    this.nearSnow = this.createMarineSnow(180, 2, 5.5, 0.25, 0.6);
+    this.midSporesData = [];
+    this.midSporesPoints = null;
 
-    // Subtle fluid grid spacing
+    this.nearSnowData = [];
+    this.nearSnowPoints = null;
+
+    // 3D Fluid Coordinate Grid
+    this.gridMesh = null;
+    this.gridNodesMesh = null;
     this.gridSpacing = 160;
 
-    // Cached gradient for screen background
-    this.bgGrad = null;
-    this.cachedW = 0;
-    this.cachedH = 0;
+    // 3D World Boundary Barrier Rings
+    this.boundaryGroup = null;
+    this.innerRingMesh = null;
+    this.outerRingMesh = null;
+
+    // Lighting references
+    this.ambientLight = null;
+    this.dirLight = null;
   }
 
-  createBokehOrbs(count, minR, maxR, minAlpha, maxAlpha) {
-    const list = [];
+  initThreeScene(scene) {
+    const THREE = window.THREE;
+    if (!THREE || !scene) return;
+
+    // 1. Deep Abyssal Fog & Void Background
+    scene.background = new THREE.Color(0x020005);
+    scene.fog = new THREE.FogExp2(0x030108, 0.00065);
+
+    // 2. Global Microscopic Lighting
+    this.ambientLight = new THREE.AmbientLight(0x180828, 0.55);
+    scene.add(this.ambientLight);
+
+    this.dirLight = new THREE.DirectionalLight(0xa855f7, 0.45);
+    this.dirLight.position.set(300, 600, 500);
+    scene.add(this.dirLight);
+
+    // 3. Layer 1: Far Nebula Bokeh Orbs (Z: -450 to -650)
+    this.initFarBokeh(scene);
+
+    // 4. Layer 2: Mid-Depth Spores & Organelles (Z: -180 to -320)
+    this.initMidSpores(scene);
+
+    // 5. Layer 3: Near Marine Snow & Plankton Motes (Z: -30 to -120)
+    this.initNearSnow(scene);
+
+    // 6. Fluid Coordinate Grid
+    this.initFluidGrid(scene);
+
+    // 7. World Boundary Barrier Rings
+    this.initBoundaryRings(scene);
+  }
+
+  initFarBokeh(scene) {
+    const THREE = window.THREE;
+    const count = 70;
+    const pos = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
     for (let i = 0; i < count; i++) {
-      // Alien contrast: mix of deep violet/purple (270-300) and toxic neon green (105-135)
+      const x = randomRange(-this.worldRadius, this.worldRadius);
+      const y = randomRange(-this.worldRadius, this.worldRadius);
+      const z = randomRange(-650, -450);
+
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+
       const hue = Math.random() > 0.4 ? randomRange(270, 305) : randomRange(105, 135);
-      list.push({
-        x: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
-        y: randomRange(-this.worldRadius * 0.9, this.worldRadius * 0.9),
-        radius: randomRange(minR, maxR),
-        alpha: randomRange(minAlpha, maxAlpha),
-        hue,
-        driftAngle: Math.random() * Math.PI * 2,
-        driftSpeed: randomRange(0.08, 0.22),
-        pulseSpeed: randomRange(0.008, 0.02),
+      const c = new THREE.Color().setHSL(hue / 360, 0.9, 0.6);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+
+      this.farBokehData.push({
+        vx: randomRange(-0.15, 0.15),
+        vy: randomRange(-0.15, 0.15),
+        pulseSpeed: randomRange(0.01, 0.025),
         pulsePhase: Math.random() * Math.PI * 2
       });
     }
-    return list;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 130,
+      map: this.circleTexture,
+      transparent: true,
+      opacity: 0.38,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.farBokehPoints = new THREE.Points(geo, mat);
+    scene.add(this.farBokehPoints);
   }
 
-  createMidSpores(count, minR, maxR, minAlpha, maxAlpha) {
-    const list = [];
+  initMidSpores(scene) {
+    const THREE = window.THREE;
+    const count = 150;
+    const pos = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
     for (let i = 0; i < count; i++) {
+      const x = randomRange(-this.worldRadius, this.worldRadius);
+      const y = randomRange(-this.worldRadius, this.worldRadius);
+      const z = randomRange(-320, -180);
+
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+
       const hue = Math.random() > 0.5 ? randomRange(110, 135) : randomRange(265, 295);
-      list.push({
-        x: randomRange(-this.worldRadius, this.worldRadius),
-        y: randomRange(-this.worldRadius, this.worldRadius),
-        radius: randomRange(minR, maxR),
-        alpha: randomRange(minAlpha, maxAlpha),
-        hue,
+      const c = new THREE.Color().setHSL(hue / 360, 0.95, 0.65);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+
+      this.midSporesData.push({
+        vx: randomRange(-0.35, 0.35),
+        vy: randomRange(-0.35, 0.35),
+        pulseSpeed: randomRange(0.02, 0.04),
+        pulsePhase: Math.random() * Math.PI * 2
+      });
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 32,
+      map: this.circleTexture,
+      transparent: true,
+      opacity: 0.55,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.midSporesPoints = new THREE.Points(geo, mat);
+    scene.add(this.midSporesPoints);
+  }
+
+  initNearSnow(scene) {
+    const THREE = window.THREE;
+    const count = 300;
+    const pos = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      const x = randomRange(-this.worldRadius, this.worldRadius);
+      const y = randomRange(-this.worldRadius, this.worldRadius);
+      const z = randomRange(-120, -30);
+
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+
+      const hue = Math.random() > 0.35 ? randomRange(100, 135) : randomRange(270, 295);
+      const c = new THREE.Color().setHSL(hue / 360, 1.0, 0.75);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+
+      this.nearSnowData.push({
         vx: randomRange(-0.25, 0.25),
         vy: randomRange(-0.25, 0.25),
-        pulsePhase: Math.random() * Math.PI * 2,
-        pulseSpeed: randomRange(0.015, 0.035)
+        flickerSpeed: randomRange(0.03, 0.07),
+        flickerPhase: Math.random() * Math.PI * 2
       });
     }
-    return list;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 7,
+      map: this.circleTexture,
+      transparent: true,
+      opacity: 0.7,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.nearSnowPoints = new THREE.Points(geo, mat);
+    scene.add(this.nearSnowPoints);
   }
 
-  createMarineSnow(count, minR, maxR, minAlpha, maxAlpha) {
-    const list = [];
-    for (let i = 0; i < count; i++) {
-      const hue = Math.random() > 0.35 ? randomRange(100, 135) : randomRange(270, 295);
-      list.push({
-        x: randomRange(-this.worldRadius, this.worldRadius),
-        y: randomRange(-this.worldRadius, this.worldRadius),
-        radius: randomRange(minR, maxR),
-        baseAlpha: randomRange(minAlpha, maxAlpha),
-        hue,
-        vx: randomRange(-0.2, 0.2),
-        vy: randomRange(-0.2, 0.2),
-        flickerPhase: Math.random() * Math.PI * 2,
-        flickerSpeed: randomRange(0.025, 0.06)
-      });
-    }
-    return list;
+  initFluidGrid(scene) {
+    const THREE = window.THREE;
+    // Dynamic grid line segments centered around the viewport
+    // 24 horizontal and 24 vertical lines with 12 segments each
+    const linesCount = 24;
+    const segsPerLine = 12;
+    const totalVerts = (linesCount * 2) * (segsPerLine * 2);
+    const pos = new Float32Array(totalVerts * 3);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.gridMesh = new THREE.LineSegments(geo, mat);
+    scene.add(this.gridMesh);
+
+    // Grid coordinate intersection nodes
+    const nodeCount = linesCount * linesCount;
+    const nodePos = new Float32Array(nodeCount * 3);
+    const nodeGeo = new THREE.BufferGeometry();
+    nodeGeo.setAttribute("position", new THREE.BufferAttribute(nodePos, 3));
+
+    const nodeMat = new THREE.PointsMaterial({
+      size: 5,
+      map: this.circleTexture,
+      color: 0x39ff14,
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    this.gridNodesMesh = new THREE.Points(nodeGeo, nodeMat);
+    scene.add(this.gridNodesMesh);
   }
 
-  update(dt = 1) {
-    // 1. Animate far nebula bokeh
-    for (let i = 0; i < this.farBokeh.length; i++) {
-      const b = this.farBokeh[i];
-      b.x += Math.cos(b.driftAngle) * b.driftSpeed * dt;
-      b.y += Math.sin(b.driftAngle) * b.driftSpeed * dt;
-      b.pulsePhase += b.pulseSpeed * dt;
-    }
+  initBoundaryRings(scene) {
+    const THREE = window.THREE;
+    this.boundaryGroup = new THREE.Group();
 
-    // 2. Animate mid-depth spores
-    for (let i = 0; i < this.midSpores.length; i++) {
-      const s = this.midSpores[i];
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      s.pulsePhase += s.pulseSpeed * dt;
-    }
+    // Inner Toxic Green Ring
+    const innerGeo = new THREE.RingGeometry(this.worldRadius - 4, this.worldRadius + 4, 128);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0x39ff14,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    this.innerRingMesh = new THREE.Mesh(innerGeo, innerMat);
+    this.innerRingMesh.position.set(0, 0, 0.5);
+    this.boundaryGroup.add(this.innerRingMesh);
 
-    // 3. Animate near marine snow
-    for (let i = 0; i < this.nearSnow.length; i++) {
-      const s = this.nearSnow[i];
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      s.flickerPhase += s.flickerSpeed * dt;
-    }
+    // Outer Alien Purple Ring
+    const outerGeo = new THREE.RingGeometry(this.worldRadius + 22, this.worldRadius + 28, 128);
+    const outerMat = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      transparent: true,
+      opacity: 0.52,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    this.outerRingMesh = new THREE.Mesh(outerGeo, outerMat);
+    this.outerRingMesh.position.set(0, 0, 0.4);
+    this.boundaryGroup.add(this.outerRingMesh);
+
+    scene.add(this.boundaryGroup);
   }
 
-  render(ctx, camera, viewWidth, viewHeight) {
-    // 1. Deep abyss vignette: Cached radial gradient
-    if (this.cachedW !== viewWidth || this.cachedH !== viewHeight || !this.bgGrad) {
-      this.cachedW = viewWidth;
-      this.cachedH = viewHeight;
-      this.bgGrad = ctx.createRadialGradient(
-        viewWidth / 2, viewHeight / 2, 70,
-        viewWidth / 2, viewHeight / 2, Math.max(viewWidth, viewHeight) * 0.78
-      );
-      this.bgGrad.addColorStop(0, "#120320"); // Murky alien abyss purple core
-      this.bgGrad.addColorStop(0.55, "#080110"); // Deep void purple
-      this.bgGrad.addColorStop(1, "#020005"); // Abyssal black edge
-    }
+  update(dt = 1, camX = 0, camY = 0) {
+    const wrapRadius = 2600;
 
-    ctx.fillStyle = this.bgGrad;
-    ctx.fillRect(0, 0, viewWidth, viewHeight);
+    // 1. Update Far Bokeh Points
+    if (this.farBokehPoints) {
+      const pos = this.farBokehPoints.geometry.attributes.position.array;
+      for (let i = 0; i < this.farBokehData.length; i++) {
+        const d = this.farBokehData[i];
+        let x = pos[i * 3] + d.vx * dt;
+        let y = pos[i * 3 + 1] + d.vy * dt;
 
-    // Viewport half-dimensions in world scale
-    const halfW = (viewWidth / 2) / camera.zoom;
-    const halfH = (viewHeight / 2) / camera.zoom;
+        // Wrap around camera
+        if (x - camX > wrapRadius) x -= wrapRadius * 2;
+        else if (x - camX < -wrapRadius) x += wrapRadius * 2;
+        if (y - camY > wrapRadius) y -= wrapRadius * 2;
+        else if (y - camY < -wrapRadius) y += wrapRadius * 2;
 
-    // 2. Layer 1: Far Nebula Bokeh Orbs (Parallax factor ~0.12) with frustum culling
-    ctx.save();
-    const farParallax = 0.12;
-    ctx.translate(viewWidth / 2, viewHeight / 2);
-    ctx.scale(camera.zoom, camera.zoom);
-    ctx.translate(-camera.pos.x * farParallax, -camera.pos.y * farParallax);
-
-    const farCamX = camera.pos.x * farParallax;
-    const farCamY = camera.pos.y * farParallax;
-
-    for (let i = 0; i < this.farBokeh.length; i++) {
-      const b = this.farBokeh[i];
-      const pulse = 1 + Math.sin(b.pulsePhase) * 0.14;
-      const r = b.radius * pulse;
-
-      // Frustum culling: skip off-screen orbs
-      if (Math.abs(b.x - farCamX) > halfW + r || Math.abs(b.y - farCamY) > halfH + r) {
-        continue;
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = y;
+        d.pulsePhase += d.pulseSpeed * dt;
       }
-
-      const bokehGrad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
-      bokehGrad.addColorStop(0, hsla(b.hue, 90, 65, b.alpha * 1.5));
-      bokehGrad.addColorStop(0.55, hsla(b.hue, 85, 45, b.alpha * 0.65));
-      bokehGrad.addColorStop(1, hsla(b.hue, 80, 30, 0));
-
-      ctx.fillStyle = bokehGrad;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
-      ctx.fill();
+      this.farBokehPoints.geometry.attributes.position.needsUpdate = true;
     }
-    ctx.restore();
 
-    // 3. Layer 2: Mid-Depth Spores & Vacuoles (Parallax factor ~0.35) with frustum culling
-    ctx.save();
-    const midParallax = 0.35;
-    ctx.translate(viewWidth / 2, viewHeight / 2);
-    ctx.scale(camera.zoom, camera.zoom);
-    ctx.translate(-camera.pos.x * midParallax, -camera.pos.y * midParallax);
+    // 2. Update Mid Spores Points
+    if (this.midSporesPoints) {
+      const pos = this.midSporesPoints.geometry.attributes.position.array;
+      for (let i = 0; i < this.midSporesData.length; i++) {
+        const d = this.midSporesData[i];
+        let x = pos[i * 3] + d.vx * dt;
+        let y = pos[i * 3 + 1] + d.vy * dt;
 
-    const midCamX = camera.pos.x * midParallax;
-    const midCamY = camera.pos.y * midParallax;
+        if (x - camX > wrapRadius) x -= wrapRadius * 2;
+        else if (x - camX < -wrapRadius) x += wrapRadius * 2;
+        if (y - camY > wrapRadius) y -= wrapRadius * 2;
+        else if (y - camY < -wrapRadius) y += wrapRadius * 2;
 
-    for (let i = 0; i < this.midSpores.length; i++) {
-      const s = this.midSpores[i];
-      const pulse = 1 + Math.sin(s.pulsePhase) * 0.2;
-      const r = s.radius * pulse;
-
-      // Frustum culling: skip off-screen spores
-      if (Math.abs(s.x - midCamX) > halfW + r || Math.abs(s.y - midCamY) > halfH + r) {
-        continue;
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = y;
+        d.pulsePhase += d.pulseSpeed * dt;
       }
-
-      const sporeGrad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      sporeGrad.addColorStop(0, hsla(s.hue, 95, 70, s.alpha * 1.3));
-      sporeGrad.addColorStop(0.65, hsla(s.hue, 90, 50, s.alpha * 0.5));
-      sporeGrad.addColorStop(1, hsla(s.hue, 85, 30, 0));
-
-      ctx.fillStyle = sporeGrad;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-      ctx.fill();
+      this.midSporesPoints.geometry.attributes.position.needsUpdate = true;
     }
-    ctx.restore();
 
-    // 4. Layer 3: Near-Depth Marine Snow (Parallax factor ~0.60) with frustum culling
-    ctx.save();
-    const nearParallax = 0.60;
-    ctx.translate(viewWidth / 2, viewHeight / 2);
-    ctx.scale(camera.zoom, camera.zoom);
-    ctx.translate(-camera.pos.x * nearParallax, -camera.pos.y * nearParallax);
+    // 3. Update Near Snow Points
+    if (this.nearSnowPoints) {
+      const pos = this.nearSnowPoints.geometry.attributes.position.array;
+      for (let i = 0; i < this.nearSnowData.length; i++) {
+        const d = this.nearSnowData[i];
+        let x = pos[i * 3] + d.vx * dt;
+        let y = pos[i * 3 + 1] + d.vy * dt;
 
-    const nearCamX = camera.pos.x * nearParallax;
-    const nearCamY = camera.pos.y * nearParallax;
+        if (x - camX > wrapRadius) x -= wrapRadius * 2;
+        else if (x - camX < -wrapRadius) x += wrapRadius * 2;
+        if (y - camY > wrapRadius) y -= wrapRadius * 2;
+        else if (y - camY < -wrapRadius) y += wrapRadius * 2;
 
-    for (let i = 0; i < this.nearSnow.length; i++) {
-      const s = this.nearSnow[i];
-      if (Math.abs(s.x - nearCamX) > halfW + s.radius || Math.abs(s.y - nearCamY) > halfH + s.radius) {
-        continue;
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = y;
+        d.flickerPhase += d.flickerSpeed * dt;
       }
-      const alpha = s.baseAlpha * (0.8 + Math.sin(s.flickerPhase) * 0.25);
-      ctx.fillStyle = hsla(s.hue, 95, 75, alpha);
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
-      ctx.fill();
+      this.nearSnowPoints.geometry.attributes.position.needsUpdate = true;
     }
-    ctx.restore();
+
+    // 4. Undulate Dynamic Fluid Coordinate Grid around camera
+    if (this.gridMesh && this.gridNodesMesh) {
+      this.updateFluidGrid(camX, camY);
+    }
+
+    // 5. Pulsate Boundary Barrier Rings
+    if (this.innerRingMesh && this.outerRingMesh) {
+      const time = performance.now() * 0.0018;
+      const pulseScale = 1 + Math.sin(time * 2) * 0.003;
+      this.innerRingMesh.scale.set(pulseScale, pulseScale, 1);
+      this.outerRingMesh.scale.set(pulseScale, pulseScale, 1);
+    }
   }
 
-  renderWorldGrid(ctx, camera, viewWidth, viewHeight) {
-    ctx.save();
+  updateFluidGrid(camX, camY) {
+    const spacing = this.gridSpacing;
+    const linesCount = 24;
+    const segsPerLine = 12;
+    const halfSpan = (linesCount * spacing) * 0.5;
 
-    // Calculate visible bounds in world coordinates
-    const halfW = (viewWidth / 2) / camera.zoom;
-    const halfH = (viewHeight / 2) / camera.zoom;
-    const left = camera.pos.x - halfW;
-    const right = camera.pos.x + halfW;
-    const top = camera.pos.y - halfH;
-    const bottom = camera.pos.y + halfH;
+    const startX = Math.floor((camX - halfSpan) / spacing) * spacing;
+    const startY = Math.floor((camY - halfSpan) / spacing) * spacing;
 
-    const startX = Math.floor(left / this.gridSpacing) * this.gridSpacing;
-    const endX = Math.ceil(right / this.gridSpacing) * this.gridSpacing;
-    const startY = Math.floor(top / this.gridSpacing) * this.gridSpacing;
-    const endY = Math.ceil(bottom / this.gridSpacing) * this.gridSpacing;
-
-    // Time-based liquid membrane undulation
+    const linePos = this.gridMesh.geometry.attributes.position.array;
+    const nodePos = this.gridNodesMesh.geometry.attributes.position.array;
     const time = performance.now() * 0.0012;
-    const step = 40; // Optimized segment density
 
-    ctx.strokeStyle = "rgba(168, 85, 247, 0.12)"; // Ethereal alien violet grid
-    ctx.lineWidth = 1.2;
+    let pIdx = 0;
+    let nIdx = 0;
+    const segStep = (linesCount * spacing) / segsPerLine;
 
-    // Batch all vertical and horizontal grid lines in a single stroke call
-    ctx.beginPath();
-    for (let x = startX; x <= endX; x += this.gridSpacing) {
-      let first = true;
-      for (let y = top - step; y <= bottom + step; y += step) {
-        const waveX = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
-                        + Math.cos(y * 0.016 - time * 0.8) * 3;
-        if (first) {
-          ctx.moveTo(waveX, y);
-          first = false;
-        } else {
-          ctx.lineTo(waveX, y);
-        }
+    // Vertical undulating lines
+    for (let c = 0; c < linesCount; c++) {
+      const gx = startX + c * spacing;
+      for (let s = 0; s < segsPerLine; s++) {
+        const y1 = startY + s * segStep;
+        const y2 = startY + (s + 1) * segStep;
+
+        const waveX1 = gx + Math.sin(y1 * 0.007 + time * 1.3 + gx * 0.002) * 6;
+        const waveX2 = gx + Math.sin(y2 * 0.007 + time * 1.3 + gx * 0.002) * 6;
+
+        linePos[pIdx++] = waveX1;
+        linePos[pIdx++] = y1;
+        linePos[pIdx++] = -5;
+
+        linePos[pIdx++] = waveX2;
+        linePos[pIdx++] = y2;
+        linePos[pIdx++] = -5;
       }
     }
 
-    for (let y = startY; y <= endY; y += this.gridSpacing) {
-      let first = true;
-      for (let x = left - step; x <= right + step; x += step) {
-        const waveY = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
-                        + Math.cos(x * 0.016 - time * 0.8) * 3;
-        if (first) {
-          ctx.moveTo(x, waveY);
-          first = false;
-        } else {
-          ctx.lineTo(x, waveY);
-        }
+    // Horizontal undulating lines
+    for (let r = 0; r < linesCount; r++) {
+      const gy = startY + r * spacing;
+      for (let s = 0; s < segsPerLine; s++) {
+        const x1 = startX + s * segStep;
+        const x2 = startX + (s + 1) * segStep;
+
+        const waveY1 = gy + Math.sin(x1 * 0.007 + time * 1.3 + gy * 0.002) * 6;
+        const waveY2 = gy + Math.sin(x2 * 0.007 + time * 1.3 + gy * 0.002) * 6;
+
+        linePos[pIdx++] = x1;
+        linePos[pIdx++] = waveY1;
+        linePos[pIdx++] = -5;
+
+        linePos[pIdx++] = x2;
+        linePos[pIdx++] = waveY2;
+        linePos[pIdx++] = -5;
       }
     }
-    ctx.stroke();
 
-    // Batch all coordinate nodes into a single fill call
-    ctx.fillStyle = "rgba(57, 255, 20, 0.35)"; // Toxic green nodes
-    ctx.beginPath();
-    for (let x = startX; x <= endX; x += this.gridSpacing) {
-      for (let y = startY; y <= endY; y += this.gridSpacing) {
-        const nx = x + Math.sin(y * 0.007 + time * 1.3 + x * 0.002) * 8
-                     + Math.cos(y * 0.016 - time * 0.8) * 3;
-        const ny = y + Math.sin(x * 0.007 + time * 1.3 + y * 0.002) * 8
-                     + Math.cos(x * 0.016 - time * 0.8) * 3;
-        ctx.moveTo(nx + 1.8, ny);
-        ctx.arc(nx, ny, 1.8, 0, Math.PI * 2);
+    // Grid Intersection Nodes
+    for (let c = 0; c < linesCount; c++) {
+      const gx = startX + c * spacing;
+      for (let r = 0; r < linesCount; r++) {
+        const gy = startY + r * spacing;
+        const nx = gx + Math.sin(gy * 0.007 + time * 1.3 + gx * 0.002) * 6;
+        const ny = gy + Math.sin(gx * 0.007 + time * 1.3 + gy * 0.002) * 6;
+
+        nodePos[nIdx++] = nx;
+        nodePos[nIdx++] = ny;
+        nodePos[nIdx++] = -4.5;
       }
     }
-    ctx.fill();
 
-    // World Boundary Membrane: Frustum check (only draw if near or touching viewport)
-    const viewDiag = Math.hypot(halfW, halfH);
-    const camDist = Math.hypot(camera.pos.x, camera.pos.y);
-    const boundaryRadius = this.worldRadius;
-
-    if (camDist + viewDiag >= boundaryRadius - 60 && camDist - viewDiag <= boundaryRadius + 60) {
-      const barrierPulse = Math.sin(time * 2) * 3;
-
-      // Inner glowing toxic green ring
-      ctx.strokeStyle = "rgba(57, 255, 20, 0.45)";
-      ctx.lineWidth = 4;
-      ctx.shadowBlur = 12; // Streamlined from 25 to 12
-      ctx.shadowColor = "#39ff14";
-      ctx.beginPath();
-      ctx.arc(0, 0, this.worldRadius + barrierPulse, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Outer glowing alien purple ring
-      ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
-      ctx.lineWidth = 2.5;
-      ctx.shadowBlur = 10; // Streamlined from 20 to 10
-      ctx.shadowColor = "#a855f7";
-      ctx.beginPath();
-      ctx.arc(0, 0, this.worldRadius + 22 + barrierPulse, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-
-    ctx.restore();
+    this.gridMesh.geometry.attributes.position.needsUpdate = true;
+    this.gridNodesMesh.geometry.attributes.position.needsUpdate = true;
   }
+
+  // Fallback 2D Canvas methods
+  render(ctx, camera, viewWidth, viewHeight) {}
+  renderWorldGrid(ctx, camera, viewWidth, viewHeight) {}
 }
