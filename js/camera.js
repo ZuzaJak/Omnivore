@@ -118,35 +118,45 @@ export class Camera {
 
   screenToWorld(screenX, screenY) {
     // Exact perspective ray intersection onto the Z=0 gameplay plane
-    const centeredX = screenX - (this.viewportWidth / 2 + this.shakeOffset.x);
-    const centeredY = screenY - (this.viewportHeight / 2 + this.shakeOffset.y);
+    // Camera center in world space (accounts for camera position and shake impulse)
+    const camX = this.pos.x + this.shakeOffset.x;
+    const camY = this.pos.y + this.shakeOffset.y;
 
-    const worldX = centeredX / this.zoom + this.pos.x;
-    const worldY = centeredY / this.zoom + this.pos.y;
+    // Viewport offsets from screen center
+    const deltaX = screenX - this.viewportWidth * 0.5;
+    const deltaY = screenY - this.viewportHeight * 0.5;
+
+    // In Three.js, +X is Right, +Y is Up; whereas in screen coordinates, +Y is Down.
+    // Therefore, moving Down on screen corresponds to moving in -Y in the 3D world.
+    const worldX = camX + deltaX / this.zoom;
+    const worldY = camY - deltaY / this.zoom;
 
     return this._scratchWorld.set(worldX, worldY);
   }
 
   worldToScreen(worldX, worldY) {
-    const centeredX = (worldX - this.pos.x) * this.zoom;
-    const centeredY = (worldY - this.pos.y) * this.zoom;
+    // Inverse transformation of screenToWorld
+    const camX = this.pos.x + this.shakeOffset.x;
+    const camY = this.pos.y + this.shakeOffset.y;
 
-    const screenX = centeredX + (this.viewportWidth / 2 + this.shakeOffset.x);
-    const screenY = centeredY + (this.viewportHeight / 2 + this.shakeOffset.y);
+    const screenX = this.viewportWidth * 0.5 + (worldX - camX) * this.zoom;
+    const screenY = this.viewportHeight * 0.5 - (worldY - camY) * this.zoom;
 
     return this._scratchScreen.set(screenX, screenY);
   }
 
   isVisible(worldX, worldY, radius = 50) {
     // Frustum culling check in world space
-    const halfW = (this.viewportWidth / 2) / this.zoom + radius;
-    const halfH = (this.viewportHeight / 2) / this.zoom + radius;
+    const halfW = (this.viewportWidth * 0.5) / this.zoom + radius;
+    const halfH = (this.viewportHeight * 0.5) / this.zoom + radius;
+    const camX = this.pos.x + this.shakeOffset.x;
+    const camY = this.pos.y + this.shakeOffset.y;
 
     return (
-      worldX >= this.pos.x - halfW &&
-      worldX <= this.pos.x + halfW &&
-      worldY >= this.pos.y - halfH &&
-      worldY <= this.pos.y + halfH
+      worldX >= camX - halfW &&
+      worldX <= camX + halfW &&
+      worldY >= camY - halfH &&
+      worldY <= camY + halfH
     );
   }
 

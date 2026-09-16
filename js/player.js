@@ -102,7 +102,11 @@ export class Player extends Cell {
     // Direction toward pointer target
     const toTarget = Vector2D.sub(this.targetPos, this.pos);
     if (toTarget.magSq() < 1) {
-      toTarget.set(1, 0);
+      if (this.vel.magSq() > 0.01) {
+        toTarget.set(this.vel.x, this.vel.y).normalize();
+      } else {
+        toTarget.set(1, 0);
+      }
     } else {
       toTarget.normalize();
     }
@@ -142,6 +146,9 @@ export class Player extends Cell {
       this.applyForce(toTarget.mult(thrust));
     } else {
       this.vel.mult(0.85);
+      if (this.vel.magSq() < 0.005) {
+        this.vel.set(0, 0);
+      }
     }
 
     // 2. Dash cooldown and glow decay

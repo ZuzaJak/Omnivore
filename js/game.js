@@ -104,6 +104,18 @@ export class Game {
     this.resize();
   }
 
+  getCanvasPointer(clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const w = this.camera ? this.camera.viewportWidth : this.canvas.width;
+    const h = this.camera ? this.camera.viewportHeight : this.canvas.height;
+    const normX = rect.width > 0 ? (clientX - rect.left) / rect.width : 0.5;
+    const normY = rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5;
+    return {
+      x: normX * w,
+      y: normY * h
+    };
+  }
+
   bindEvents() {
     window.addEventListener("resize", () => this.resize());
     window.addEventListener(
@@ -115,12 +127,14 @@ export class Game {
     );
 
     window.addEventListener("mousemove", (e) => {
-      const rect = this.canvasRect || this.canvas.getBoundingClientRect();
-      this.mouseScreen.set(e.clientX - rect.left, e.clientY - rect.top);
+      const p = this.getCanvasPointer(e.clientX, e.clientY);
+      this.mouseScreen.set(p.x, p.y);
     });
 
     window.addEventListener("mousedown", (e) => {
       if (e.button === 0) {
+        const p = this.getCanvasPointer(e.clientX, e.clientY);
+        this.mouseScreen.set(p.x, p.y);
         this.sound.init();
         if (this.state === GAME_STATES.PLAYING) {
           this.triggerPlayerDash();
@@ -152,16 +166,13 @@ export class Game {
         this.sound.init();
 
         if (e.touches.length > 0) {
-          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
-          const touchX = e.touches[0].clientX - rect.left;
-          const touchY = e.touches[0].clientY - rect.top;
-
-          this.mouseScreen.set(touchX, touchY);
+          const p = this.getCanvasPointer(e.touches[0].clientX, e.touches[0].clientY);
+          this.mouseScreen.set(p.x, p.y);
 
           // Double-tap detection for Dash
           const now = performance.now();
           const timeDiff = now - this.lastTapTime;
-          const distDiff = Math.hypot(touchX - this.lastTapPos.x, touchY - this.lastTapPos.y);
+          const distDiff = Math.hypot(p.x - this.lastTapPos.x, p.y - this.lastTapPos.y);
 
           if (timeDiff < 300 && distDiff < 50) {
             if (this.state === GAME_STATES.PLAYING) {
@@ -170,7 +181,7 @@ export class Game {
             this.lastTapTime = 0;
           } else {
             this.lastTapTime = now;
-            this.lastTapPos.set(touchX, touchY);
+            this.lastTapPos.set(p.x, p.y);
           }
         }
       },
@@ -187,11 +198,8 @@ export class Game {
         e.preventDefault();
 
         if (e.touches.length > 0) {
-          const rect = this.canvasRect || this.canvas.getBoundingClientRect();
-          this.mouseScreen.set(
-            e.touches[0].clientX - rect.left,
-            e.touches[0].clientY - rect.top
-          );
+          const p = this.getCanvasPointer(e.touches[0].clientX, e.touches[0].clientY);
+          this.mouseScreen.set(p.x, p.y);
         }
       },
       { passive: false }
@@ -392,7 +400,7 @@ export class Game {
 
       this.particles.addFloatingText(
         this.player.pos.x,
-        this.player.pos.y - this.player.radius - 12,
+        this.player.pos.y + this.player.radius + 14,
         "-Dash",
         "#4ade80",
         13
@@ -497,7 +505,7 @@ export class Game {
 
           this.particles.addFloatingText(
             pPos.x,
-            pPos.y - pR - 16,
+            pPos.y + pR + 18,
             "-8% Leech!",
             "#f43f5e",
             15
@@ -525,7 +533,7 @@ export class Game {
 
           this.particles.addFloatingText(
             cell.pos.x,
-            cell.pos.y,
+            cell.pos.y + cell.radius + 14,
             `+${eatenMass}`,
             cell.glowColor,
             Math.max(14, Math.min(24, Math.round(cell.radius * 0.55)))
